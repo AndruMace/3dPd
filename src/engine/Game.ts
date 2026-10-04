@@ -61,6 +61,12 @@ const CHAPTERS: Record<number, [number, string]> = {
 };
 
 export const Game = {
+  /**
+   * Action mode (real time): characters are driven by `ActionGame`, so commands don't run the turn scheduler
+   * afterwards and level switches don't hand the hero a turn.
+   */
+  realtime: false,
+
   newGame(config: RunConfig): void {
     Random.seed(config.seed);
     Events.clear();
@@ -114,7 +120,7 @@ export const Game = {
 
   /** True when the hero is waiting for a command. */
   isReady(): boolean {
-    return Dungeon.hero.ready && Dungeon.hero.isAlive() && UI.pending === null;
+    return (Game.realtime || Dungeon.hero.ready) && Dungeon.hero.isAlive() && UI.pending === null;
   },
 
   /**
@@ -122,6 +128,7 @@ export const Game = {
    * the view can catch up. Call `continue()` once the view is done animating.
    */
   isBusy(): boolean {
+    if (Game.realtime) return false;
     const hero = Dungeon.hero;
     return hero.isAlive() && !hero.ready && hero.pendingTransition === null && UI.pending === null;
   },
@@ -305,7 +312,7 @@ export const Game = {
 /** After a hero command: if the hero spent time, let everyone else act until the hero's next turn. */
 function afterHeroAction(): void {
   const hero = Dungeon.hero;
-  if (UI.pending !== null) return;
+  if (UI.pending !== null || Game.realtime) return;
   if (!hero.ready && hero.isAlive() && hero.pendingTransition === null) {
     hero.next();
     Actor.process(0);
@@ -555,5 +562,5 @@ function switchLevel(level: Level, pos: number, mode: Mode): void {
     }
   }
 
-  Actor.process(1);
+  if (!Game.realtime) Actor.process(1);
 }

@@ -11,7 +11,7 @@ import type { Bag } from '../engine/items/bags';
 import { appendLog, GameLog, StatusPane, Toolbar, type LogEntry } from './hudParts';
 import type { Prefs } from '../platform/settings';
 import { Chrome, Img, ItemIcon, measureText, NinePatch, Text } from './pixel/components';
-import { CharPortrait, hex } from './pixel/widgets';
+import { CharPortrait, hex, RedButton } from './pixel/widgets';
 import {
   GameOver,
   WndBag,
@@ -215,6 +215,7 @@ export function GameUI({
         enabled={state.ready || state.examining}
         quickslot={state.quickslot}
         infoActive={state.examining}
+        classicTools={!state.action}
         onWait={() => game.rest(false)}
         onRest={() => game.rest(true)}
         onSearch={() => game.search()}
@@ -223,6 +224,16 @@ export function GameUI({
         onQuickslot={() => game.quickslot()}
         onQuickslotLong={() => state.ready && push({ kind: 'bag', bag: null, mode: 'QUICKSLOT', purpose: 'quickslot' })}
       />
+      {state.action && state.interaction && state.ready && !state.prompt && (
+        <div class="interact-button" style={{ bottom: `${TOOLBAR_HEIGHT + 22}px` }}>
+          <RedButton
+            label={state.interaction.kind === 'descend' ? 'Descend' : 'Ascend'}
+            width={64}
+            height={20}
+            onClick={() => game.interact()}
+          />
+        </div>
+      )}
       {state.examining && <Toast text="Select a cell to examine" bottom={60} onClose={() => game.examine()} />}
       {windows}
       {promptView}

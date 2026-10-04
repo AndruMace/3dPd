@@ -401,6 +401,18 @@ export function WndSettings({
         />
         <CheckBox label="Music" width={WIDTH} checked={prefs.music} onChange={(v) => onChange({ music: v })} />
         <CheckBox label="Sound FX" width={WIDTH} checked={prefs.sound} onChange={(v) => onChange({ sound: v })} />
+        <CheckBox
+          label="Action mode"
+          width={WIDTH}
+          checked={prefs.mode === 'action'}
+          onChange={(v) => onChange({ mode: v ? 'action' : 'classic' })}
+        />
+        <CheckBox
+          label="Figures turn"
+          width={WIDTH}
+          checked={prefs.turnFigures}
+          onChange={(v) => onChange({ turnFigures: v })}
+        />
       </div>
     </Window>
   );

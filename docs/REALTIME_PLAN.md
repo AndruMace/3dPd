@@ -181,6 +181,24 @@ Prototype both in phase 1 behind a debug toggle, then pick one by eye.
 - Saves from Action mode and Classic mode are not interchangeable (a mode flag in `SavedGame.info`). Starting the
   other mode offers a new game.
 
+## Status
+
+- **Phase 1 (walk the sewers): done.**
+  - Engine (`src/engine/realtime/`):
+    - `ActionGame` runs a fixed 30 Hz world clock that drives buffs, blobs and hunger in seconds.
+    - Bodies collide with the grid, door jambs included.
+    - Crossing into a cell runs PD's cell logic: traps, grass, FOV, passive search and auto-pickup.
+    - Doors open on approach.
+    - Interact takes the stairs.
+  - View:
+    - `ChaseCamera` with shoulder offset, auto-follow on touch, and drag or Z/C to turn.
+    - A tighter wall cut-away.
+    - Characters, items and props scaled so a cell reads as 3 m.
+    - `ActionControls`: WASD, mouse drag and wheel, and a floating touch joystick with right-side look.
+    - Interact button.
+    - Settings: **Action mode** and **Figures turn**, the facing prototype.
+  - Classic mode is unchanged and still selectable.
+
 ## Phases
 
 Each phase ends playable and committed on `realtime-arpg`.

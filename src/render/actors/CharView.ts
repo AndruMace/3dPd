@@ -67,6 +67,15 @@ export class CharView extends THREE.Group {
     this.sprite.play('run');
   }
 
+  /** Action mode: run while the body moves, idle when it stops (one-shot animations play out first). */
+  setRunning(running: boolean): void {
+    const anims = this.sprite.def.animations;
+    const cur = this.sprite.clip.anim;
+    if (this.dying || this.falling > 0) return;
+    if (running && (cur === anims.idle || !cur || this.sprite.clip.finished)) this.sprite.play('run');
+    else if (!running && cur === anims.run) this.sprite.play('idle');
+  }
+
   /** A position tween without the run animation (Pushing, Swap, jump arcs). Returns its duration. */
   tween(from: number, to: number, duration: number, arc: number): number {
     this.pos = to;

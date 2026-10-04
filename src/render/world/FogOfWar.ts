@@ -39,7 +39,16 @@ export interface WorldUniforms {
   /** Horizontal unit vector from the camera towards the hero. */
   uViewDir: { value: THREE.Vector2 };
   uCutHeight: { value: number };
+  /** Where walls are cut, along the view direction from the hero: fades in over [x, y], out over [z, w]. */
+  uCutAlong: { value: THREE.Vector4 };
+  /** Lateral extent of the cut: full inside x, none beyond y. */
+  uCutLateral: { value: THREE.Vector2 };
 }
+
+/** The top-down rig's cut-away zone (walls up to ~3 cells in front of the camera). */
+export const CUT_TOP_DOWN = { along: new THREE.Vector4(-3.6, -2.6, -0.2, 0.6), lateral: new THREE.Vector2(1.6, 2.4) };
+/** The chase camera's: only what stands between the camera (about 1.4 cells back) and the hero. */
+export const CUT_CHASE = { along: new THREE.Vector4(-2.6, -2.0, -0.05, 0.3), lateral: new THREE.Vector2(0.45, 0.85) };
 
 export function createWorldUniforms(fog: FogOfWar): WorldUniforms {
   return {
@@ -47,6 +56,8 @@ export function createWorldUniforms(fog: FogOfWar): WorldUniforms {
     uHero: { value: new THREE.Vector3() },
     uViewDir: { value: new THREE.Vector2(0, -1) },
     uCutHeight: { value: 0.18 },
+    uCutAlong: { value: CUT_TOP_DOWN.along.clone() },
+    uCutLateral: { value: CUT_TOP_DOWN.lateral.clone() },
   };
 }
 
@@ -65,6 +76,8 @@ export function applyWorldShader(material: THREE.Material, uniforms: WorldUnifor
         uniform vec3 uHero;
         uniform vec2 uViewDir;
         uniform float uCutHeight;
+        uniform vec4 uCutAlong;
+        uniform vec2 uCutLateral;
         ${cutaway ? 'attribute vec2 aCell; attribute float aCut;' : ''}`,
       )
       .replace(
@@ -79,7 +92,7 @@ export function applyWorldShader(material: THREE.Material, uniforms: WorldUnifor
           float along = dot(d, uViewDir);
           float lateral = abs(d.x * uViewDir.y - d.y * uViewDir.x);
           // Walls between the camera and the hero shrink to a stub.
-          float cut = (1.0 - smoothstep(-0.2, 0.6, along)) * smoothstep(-3.6, -2.6, along) * (1.0 - smoothstep(1.6, 2.4, lateral));
+          float cut = (1.0 - smoothstep(uCutAlong.z, uCutAlong.w, along)) * smoothstep(uCutAlong.x, uCutAlong.y, along) * (1.0 - smoothstep(uCutLateral.x, uCutLateral.y, lateral));
           // Door panels (aCut 2) only come down to half height so they stay recognisable.
           float cutH = aCut > 1.5 ? 0.5 : uCutHeight;
           if (transformed.y > cutH) transformed.y = mix(transformed.y, cutH, cut);

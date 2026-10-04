@@ -16,11 +16,15 @@ import { onAppPause } from '../platform/lifecycle';
 import { Storage } from '../platform/storage';
 import { submitRanking } from './rankings';
 import { CameraRig } from '../render/camera/CameraRig';
+import { ChaseCamera } from '../render/camera/ChaseCamera';
+import { ActionGame, type Interaction } from '../engine/realtime/ActionGame';
+import { Settings } from '../platform/settings';
+import { ActionControls } from './ActionControls';
 import { CharView, cellToWorld, MOVE_INTERVAL } from '../render/actors/CharView';
 import { HeapView } from '../render/actors/HeapView';
 import { FxView } from '../render/fx/FxView';
 import { BlobEmitter, KINDS } from '../render/fx/Particles';
-import { createWorldUniforms, FogOfWar, type WorldUniforms } from '../render/world/FogOfWar';
+import { createWorldUniforms, CUT_CHASE, CUT_TOP_DOWN, FogOfWar, type WorldUniforms } from '../render/world/FogOfWar';
 import { LevelView } from '../render/world/LevelView';
 import { TileAtlas } from '../render/world/TileAtlas';
 import { FloatingTextLayer } from '../ui/FloatingText';
@@ -48,7 +52,18 @@ export interface ViewState {
   dead: string | null;
   /** A full-screen colour flash (GameScene.flash), as [color, serial]. */
   flash: [number, number] | null;
+  /** Action mode (real time) is running this run. */
+  action: boolean;
+  /** Action mode: what the Interact button would do here (stairs), or null. */
+  interaction: Interaction | null;
 }
+
+/** Action mode: characters are drawn this big relative to a cell (one cell is 3 m). */
+const ACTION_CHAR_SCALE = 0.55;
+const ACTION_ITEM_SCALE = 0.5;
+
+/** What both cameras offer the controller. */
+type Rig = CameraRig | ChaseCamera;
 
 /** Events that take no time to show and never end a movement beat. */
 const INSTANT = new Set<GameEvent['type']>([
@@ -81,7 +96,12 @@ const TRANSITION_TEXT: Record<string, string> = {
 export class GameController {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
-  readonly rig: CameraRig;
+  private readonly topRig: CameraRig;
+  private readonly chase: ChaseCamera;
+  /** Action mode is on for the current run. */
+  private action = false;
+  private actionAlpha = 1;
+  private controls!: ActionControls;
   private readonly fog = new FogOfWar();
   private readonly uniforms: WorldUniforms;
   private levelView: LevelView | null = null;
@@ -115,6 +135,8 @@ export class GameController {
     resurrect: false,
     dead: null,
     flash: null,
+    action: false,
+    interaction: null,
   };
   onState: (state: ViewState) => void = () => {};
   onLog: (text: string, kind: string) => void = () => {};
@@ -127,7 +149,8 @@ export class GameController {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     container.appendChild(this.renderer.domElement);
 
-    this.rig = new CameraRig(1);
+    this.topRig = new CameraRig(1);
+    this.chase = new ChaseCamera(1);
     this.uniforms = createWorldUniforms(this.fog);
     this.scene.background = new THREE.Color(0x000000);
 
@@ -138,6 +161,18 @@ export class GameController {
     this.scene.add(this.fx);
 
     this.floating = new FloatingTextLayer(container);
+    this.controls = new ActionControls(this.renderer.domElement, {
+      rotateCamera: (r) => this.chase.rotateBy(r),
+      zoomCamera: (f) => this.chase.zoomBy(f),
+      interact: () => this.interact(),
+      tap: (x, y) => {
+        Audio.unlock();
+        if (this.inputBlocked()) return;
+        const cell = this.pickCell(x, y);
+        if (cell !== -1 && Game.prompt?.kind === 'cell') this.tapCell(cell);
+      },
+      blocked: () => this.inputBlocked() || !this.canCommand(),
+    });
     this.bindInput();
     addEventListener('resize', () => this.resize());
     onAppPause(
@@ -149,6 +184,36 @@ export class GameController {
     );
     this.resize();
     this.renderer.setAnimationLoop(() => this.frame());
+  }
+
+  get rig(): Rig {
+    return this.action ? this.chase : this.topRig;
+  }
+
+  /** Classic (turn-based) or action (real-time) for the run about to start, from Settings. */
+  private applyMode(): void {
+    this.action = Settings.get().mode === 'action';
+    ActionGame.enable(this.action);
+    this.controls.enabled = this.action;
+    this.controls.reset();
+    const cut = this.action ? CUT_CHASE : CUT_TOP_DOWN;
+    this.uniforms.uCutAlong.value.copy(cut.along);
+    this.uniforms.uCutLateral.value.copy(cut.lateral);
+    this.uniforms.uCutHeight.value = this.action ? 0.12 : 0.18;
+    // Up close the hero's lantern would blow out nearby walls: dimmer and shorter-ranged in action mode.
+    this.heroLight.position.set(0, this.action ? 1.4 : 1.6, 0);
+    this.heroLight.intensity = this.action ? 3 : 14;
+    this.heroLight.distance = this.action ? 6 : 10;
+    this.heroLight.decay = this.action ? 1 : 1.4;
+    this.resize();
+    this.patch({ action: this.action, interaction: null });
+  }
+
+  /** Action mode's Interact button / key. */
+  interact(): void {
+    if (!this.action || !this.canCommand()) return;
+    ActionGame.interact();
+    this.enqueue();
   }
 
   /** The game scene is showing (the title and other menus pause rendering and hide the 3D view). */
@@ -167,6 +232,7 @@ export class GameController {
 
   start(seed: number | string, heroClass: HeroClass = 'WARRIOR'): void {
     this.reset();
+    this.applyMode();
     Game.newGame({ seed, heroClass });
     this.enqueue();
     Audio.music(Assets.TUNE);
@@ -178,6 +244,7 @@ export class GameController {
     if (!saved) return false;
     try {
       this.reset();
+      this.applyMode();
       this.patch({ interlevel: 'Loading...' });
       Game.load(saved);
       this.enqueue();
@@ -226,9 +293,15 @@ export class GameController {
     return this.idle() && Game.isReady() && !this.state.interlevel && !this.state.dead;
   }
 
-  /** The replay has caught up with the engine. */
+  /** The replay has caught up with the engine (in action mode events are shown as they come). */
   private idle(): boolean {
+    if (this.action) return this.loading === 0;
     return this.queue.length === 0 && this.loading === 0 && this.wait <= 0;
+  }
+
+  /** Action mode: the world is frozen (windows, prompts, level changes, death). */
+  private actionPaused(): boolean {
+    return !this.canCommand() || this.inputBlocked() || this.state.resurrect || !!Dungeon.hero.pendingTransition;
   }
 
   tapCell(cell: number): void {
@@ -335,7 +408,9 @@ export class GameController {
   frame(fixedDt?: number): void {
     this.timer.update();
     const dt = fixedDt ?? Math.min(this.timer.getDelta(), 0.1);
+    if (this.action) this.stepAction(dt);
     this.playback(dt);
+    if (this.action) this.syncBodies();
 
     const heroView = this.chars.get(this.heroId);
     if (heroView) {
@@ -381,8 +456,17 @@ export class GameController {
 
   private playback(dt: number): void {
     if (this.loading > 0 || !Dungeon.hero) return;
-    this.wait -= dt;
-    while (this.wait <= 0 && this.loading === 0) {
+    if (this.action) {
+      // Real time: everything that happened this frame is shown at once; nothing waits on animations.
+      while (this.loading === 0) {
+        const e = this.queue.shift();
+        if (!e) break;
+        if (e.type !== 'move' && e.type !== 'place') this.show(e);
+      }
+      this.wait = 0;
+      if (this.queue.length === 0) this.advanceEngine();
+    } else this.wait -= dt;
+    while (!this.action && this.wait <= 0 && this.loading === 0) {
       const e = this.queue.shift();
       if (!e) {
         this.wait = 0;
@@ -397,6 +481,57 @@ export class GameController {
       this.patch({ ready, prompt });
       if (ready || prompt) this.refreshStatus();
     }
+  }
+
+  /** Action mode: feed the stick to the world and advance it (unless something has it paused). */
+  private stepAction(dt: number): void {
+    if (!Dungeon.hero || this.loading > 0) return;
+    const [sx, sy] = this.controls.stick(dt);
+    if (this.actionPaused()) {
+      this.actionAlpha = 1;
+    } else {
+      const [mx, mz] = this.chase.stickToWorld(sx, sy);
+      this.actionAlpha = ActionGame.update(dt, { moveX: mx, moveZ: mz });
+      this.enqueue();
+      // On touch, the camera swings round behind the direction of travel unless the player is looking around.
+      if (this.controls.touchMoving && this.controls.sinceLook > 1)
+        this.chase.follow(mx, mz, 1.1 * Math.hypot(sx, sy), dt);
+    }
+    const interaction = ActionGame.interaction();
+    if (interaction?.kind !== this.state.interaction?.kind || interaction?.cell !== this.state.interaction?.cell)
+      this.patch({ interaction });
+  }
+
+  /** Action mode: characters stand where their bodies are (interpolated between steps), run while moving. */
+  private syncBodies(): void {
+    if (this.loading > 0 || !Dungeon.hero) return;
+    const a = this.actionAlpha;
+    const turn = Settings.get().turnFigures;
+    const cam = this.chase.camera;
+    const right = _r.setFromMatrixColumn(cam.matrixWorld, 0);
+    for (const b of ActionGame.bodies().values()) {
+      const v = this.chars.get(b.char.id());
+      if (!v) continue;
+      v.pos = b.char.pos;
+      v.position.x = b.px + (b.x - b.px) * a;
+      v.position.z = b.pz + (b.z - b.pz) * a;
+      const speed = Math.hypot(b.vx, b.vz);
+      v.setRunning(speed > 0.15);
+      v.sprite.billboard = !turn;
+      if (turn) {
+        v.sprite.flipped = false;
+        v.sprite.yaw = -b.facing;
+      } else {
+        const lateral = b.vx * right.x + b.vz * right.z;
+        if (Math.abs(lateral) > 0.08) v.sprite.flipped = lateral < 0;
+      }
+    }
+  }
+
+  /** Size a character view for the current mode. */
+  private styleChar(v: CharView): CharView {
+    v.scale.setScalar(this.action ? ACTION_CHAR_SCALE : 1);
+    return v;
   }
 
   private refreshStatus(): void {
@@ -450,6 +585,7 @@ export class GameController {
       case 'spawn': {
         this.loading++;
         void CharView.create(e.id, e.sprite, e.pos).then((v) => {
+          this.styleChar(v);
           this.chars.set(e.id, v);
           this.scene.add(v);
           this.loading--;
@@ -521,13 +657,13 @@ export class GameController {
       case 'status': {
         const v = this.chars.get(e.id);
         if (v && (v.visible || e.id === this.heroId))
-          this.floating.show(v, e.text, e.color, v.sprite.def.frameHeight / 16);
+          this.floating.show(v, e.text, e.color, (v.sprite.def.frameHeight / 16) * v.scale.y);
         if (e.id === this.heroId) this.refreshStatus();
         return 0;
       }
       case 'alert': {
         const v = this.chars.get(e.id);
-        if (v && v.visible) this.floating.show(v, '!', 'negative', v.sprite.def.frameHeight / 16);
+        if (v && v.visible) this.floating.show(v, '!', 'negative', (v.sprite.def.frameHeight / 16) * v.scale.y);
         return 0;
       }
       case 'die': {
@@ -748,6 +884,7 @@ export class GameController {
       return;
     }
     void HeapView.create(pos, image, type).then((v) => {
+      if (this.action) v.scale.setScalar(ACTION_ITEM_SCALE);
       if (this.heapTokens.get(pos) !== token) return;
       this.heaps.get(pos)?.removeFromParent();
       this.heaps.set(pos, v);
@@ -767,6 +904,7 @@ export class GameController {
       return;
     }
     void HeapView.createPlant(pos, image).then((v) => {
+      if (this.action) v.scale.setScalar(ACTION_ITEM_SCALE);
       if (this.heapTokens.get(key) !== token) return;
       this.plants.get(pos)?.removeFromParent();
       this.plants.set(pos, v);
@@ -796,12 +934,13 @@ export class GameController {
         new THREE.TextureLoader().loadAsync(ASSETS + e.water),
       ]);
       if (this.levelView) this.levelView.removeFromParent();
-      this.levelView = new LevelView(atlas, water, this.uniforms);
+      this.levelView = new LevelView(atlas, water, this.uniforms, this.action ? ACTION_ITEM_SCALE : 1);
       this.levelView.build(e.map);
       this.scene.add(this.levelView);
 
       const views = await Promise.all(e.chars.map((c) => CharView.create(c.id, c.sprite, c.pos)));
       views.forEach((v, i) => {
+        this.styleChar(v);
         v.hp = e.chars[i].hp;
         v.ht = e.chars[i].ht;
         this.chars.set(v.charId, v);
@@ -814,6 +953,7 @@ export class GameController {
 
       const heaps = await Promise.all(e.heaps.map((h) => HeapView.create(h.pos, h.image, h.type)));
       for (const h of heaps) {
+        if (this.action) h.scale.setScalar(ACTION_ITEM_SCALE);
         this.heaps.set(h.pos, h);
         this.scene.add(h);
       }
@@ -838,6 +978,7 @@ export class GameController {
 
     el.addEventListener('pointerdown', (ev) => {
       Audio.unlock();
+      if (this.action) return;
       el.setPointerCapture(ev.pointerId);
       pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, sx: ev.clientX, sy: ev.clientY });
       if (pointers.size === 1) dragged = false;
@@ -848,6 +989,7 @@ export class GameController {
       }
     });
     el.addEventListener('pointermove', (ev) => {
+      if (this.action) return;
       const p = pointers.get(ev.pointerId);
       if (!p) return;
       const dx = ev.clientX - p.x;
@@ -864,6 +1006,7 @@ export class GameController {
       if (dragged) this.rig.rotateBy((-dx / this.container.clientWidth) * Math.PI);
     });
     const end = (ev: PointerEvent) => {
+      if (this.action) return;
       const p = pointers.get(ev.pointerId);
       pointers.delete(ev.pointerId);
       if (!p) return;
@@ -880,6 +1023,7 @@ export class GameController {
     el.addEventListener(
       'wheel',
       (ev) => {
+        if (this.action) return;
         ev.preventDefault();
         this.rig.zoomBy(Math.exp(ev.deltaY * 0.001));
       },
@@ -888,7 +1032,7 @@ export class GameController {
 
     addEventListener('keydown', (ev) => {
       Audio.unlock();
-      if (ev.metaKey || ev.ctrlKey || this.inputBlocked()) return;
+      if (ev.metaKey || ev.ctrlKey || this.inputBlocked() || this.action) return;
       const dirs: Record<string, [number, number]> = {
         ArrowUp: [0, -1],
         w: [0, -1],
@@ -956,9 +1100,11 @@ export class GameController {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     this.renderer.setSize(w, h);
-    this.rig.setAspect(w / h);
+    this.topRig.setAspect(w / h);
+    this.chase.setAspect(w / h);
     this.fx.particles.setViewportHeight(h * this.renderer.getPixelRatio(), this.rig.camera.fov);
   }
 }
 
 const _w = new THREE.Vector3();
+const _r = new THREE.Vector3();

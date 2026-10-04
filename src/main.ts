@@ -2,6 +2,7 @@ import { h, render } from 'preact';
 import { GameController } from './app/GameController';
 import { Dungeon } from './engine/Dungeon';
 import { Game } from './engine/Game';
+import { Settings } from './platform/settings';
 import { App } from './ui/App';
 import { preloadChrome, preloadImages } from './ui/pixel/components';
 import { loadFonts } from './ui/pixel/font';
@@ -41,5 +42,5 @@ void (async () => {
 })();
 
 // Exposed for debugging in the console.
-Object.assign(window, { game, Game, Dungeon });
+Object.assign(window, { game, Game, Dungeon, Settings });
 if (import.meta.env.DEV) void import('./app/devtools').then((m) => m.installDevtools(game));

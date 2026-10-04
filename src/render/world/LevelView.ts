@@ -71,6 +71,8 @@ export class LevelView extends THREE.Group {
     private readonly atlas: TileAtlas,
     waterTexture: THREE.Texture,
     uniforms: WorldUniforms,
+    /** Size of voxel props (statues, signs, the alchemy pot) relative to a cell. */
+    private readonly propScale = 1,
   ) {
     super();
     this.terrainMat = new THREE.MeshLambertMaterial({ map: atlas.texture, vertexColors: true });
@@ -207,6 +209,7 @@ export class LevelView extends THREE.Group {
           );
           const prop = new THREE.Mesh(geo, this.propMat);
           prop.position.set(x + 0.5, 0, y + 0.5);
+          prop.scale.setScalar(this.propScale);
           this.props.add(prop);
         }
 

@@ -446,26 +446,28 @@ export class Hero extends Char {
 
   private actPickUp(dst: number): void {
     if (this.pos === dst) {
-      const heap = Dungeon.level.heaps.get(this.pos);
-      if (heap) {
-        const item = heap.pickUp();
-        if (item.doPickUp(this)) {
-          if (!(item instanceof Dewdrop)) {
-            if (this.isImportantPickup(item)) GLog.p(`You now have ${item.name_()}`);
-            else GLog.i(`You now have ${item.name_()}`);
-          }
-          if (!heap.isEmpty()) GLog.i('There is something else here');
-          this.curAction = null;
-        } else {
-          Dungeon.level.drop(item, this.pos).dropFX(this.pos);
-          this.markReady();
-        }
-      } else {
-        this.markReady();
-      }
+      if (this.pickUpHere()) this.curAction = null;
+      else this.markReady();
     } else if (!this.getCloser(dst)) {
       this.markReady();
     }
+  }
+
+  /** Takes the top item of the heap under the hero (actPickUp on arrival). Returns true if it was taken. */
+  pickUpHere(): boolean {
+    const heap = Dungeon.level.heaps.get(this.pos);
+    if (!heap) return false;
+    const item = heap.pickUp();
+    if (item.doPickUp(this)) {
+      if (!(item instanceof Dewdrop)) {
+        if (this.isImportantPickup(item)) GLog.p(`You now have ${item.name_()}`);
+        else GLog.i(`You now have ${item.name_()}`);
+      }
+      if (!heap.isEmpty()) GLog.i('There is something else here');
+      return true;
+    }
+    Dungeon.level.drop(item, this.pos).dropFX(this.pos);
+    return false;
   }
 
   private actOpenChest(dst: number): void {

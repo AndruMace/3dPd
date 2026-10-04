@@ -15,6 +15,8 @@ export class VoxelSprite extends THREE.Group {
   billboard = true;
   /** PD sprites face right; flipping mirrors them to face left. */
   flipped = false;
+  /** Without billboarding: the model's turn about Y (0 faces east, the way PD's sprites look). */
+  yaw = 0;
 
   private readonly mesh: THREE.Mesh;
   /** Per-sprite material so flashes and fades don't affect other characters. */
@@ -54,6 +56,8 @@ export class VoxelSprite extends THREE.Group {
       const camPos = camera.getWorldPosition(_v);
       const myPos = this.getWorldPosition(_w);
       this.mesh.rotation.y = Math.atan2(camPos.x - myPos.x, camPos.z - myPos.z);
+    } else if (!this.billboard) {
+      this.mesh.rotation.y = this.yaw;
     }
     this.mesh.scale.x = this.flipped ? -1 : 1;
   }

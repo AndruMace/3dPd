@@ -4,10 +4,14 @@ export interface Prefs {
   scaleUp: boolean;
   music: boolean;
   sound: boolean;
+  /** Classic turn-based play or the real-time action mode (applies to the next run started or loaded). */
+  mode: 'classic' | 'action';
+  /** Action mode: characters turn to face where they go (true) or keep facing the camera (false). */
+  turnFigures: boolean;
 }
 
 const KEY = 'pd3d.prefs';
-const DEFAULTS: Prefs = { scaleUp: true, music: true, sound: true };
+const DEFAULTS: Prefs = { scaleUp: true, music: true, sound: true, mode: 'action', turnFigures: false };
 
 function read(): Prefs {
   try {

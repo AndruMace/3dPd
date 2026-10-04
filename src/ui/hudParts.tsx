@@ -150,6 +150,7 @@ export function Toolbar({
   onQuickslot,
   onQuickslotLong,
   infoActive,
+  classicTools = true,
 }: {
   width: number;
   enabled: boolean;
@@ -162,6 +163,8 @@ export function Toolbar({
   onQuickslot: () => void;
   onQuickslotLong: () => void;
   infoActive: boolean;
+  /** Wait, search and examine: turn-based tools, hidden in action mode. */
+  classicTools?: boolean;
 }) {
   const tool = (
     x: number,
@@ -177,9 +180,9 @@ export function Toolbar({
   );
   return (
     <div class="toolbar" style={{ width: `${width}px` }}>
-      {tool(0, 20, 0, onWait, onRest)}
-      {tool(20, 20, 20, onSearch)}
-      {tool(40, 21, 40, onInfo, undefined, infoActive ? <div class="tool-active" /> : null)}
+      {classicTools && tool(0, 20, 0, onWait, onRest)}
+      {classicTools && tool(20, 20, 20, onSearch)}
+      {classicTools && tool(40, 21, 40, onInfo, undefined, infoActive ? <div class="tool-active" /> : null)}
       {tool(60, 23, width - 22 - 23, onInventory)}
       {tool(
         83,

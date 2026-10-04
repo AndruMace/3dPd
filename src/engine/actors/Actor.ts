@@ -142,6 +142,33 @@ export abstract class Actor implements Bundlable {
     return acts;
   }
 
+  /**
+   * Action mode's world clock: runs, in time order, every actor that isn't a character (buffs, blobs, respawners)
+   * whose time is up to `target` turns. Characters are driven by the real-time controllers instead, so their
+   * scheduler times are left alone.
+   */
+  static advance(target: number): void {
+    chars.fill(null);
+    for (const actor of all) if (actor.isChar()) chars[actor.pos] = actor;
+    for (let guard = 0; guard < 100000; guard++) {
+      let next: Actor | null = null;
+      let t = Infinity;
+      for (const actor of all) {
+        if (!actor.isChar() && actor.time < t) {
+          t = actor.time;
+          next = actor;
+        }
+      }
+      if (next === null || t > target) break;
+      now = t;
+      current = next;
+      next.act();
+      current = null;
+      if (!Dungeon.hero.isAlive()) break;
+    }
+    now = Math.max(now, target);
+  }
+
   static add(actor: Actor): void {
     Actor.addAt(actor, now);
   }
