@@ -3,7 +3,7 @@
 // Differences from the original, by design: act() runs synchronously. Where PD returned false and waited for a
 // sprite animation to call next(), the port resolves the action immediately and returns true; the view replays
 // the emitted events afterwards. act() returning false now only means "the hero is waiting for input".
-import { Dungeon } from '../Dungeon';
+import { Dungeon, Statistics } from '../Dungeon';
 import type { Bundlable, Bundle } from '../core/Bundle';
 import { LENGTH } from '../levels/constants';
 import type { Char } from './Char';
@@ -80,6 +80,7 @@ export abstract class Actor implements Bundlable {
   }
 
   static fixTime(): void {
+    if (Dungeon.hero && all.has(Dungeon.hero)) Statistics.duration += now;
     let min = Number.MAX_VALUE;
     for (const a of all) if (a.time < min) min = a.time;
     for (const a of all) a.time -= min;

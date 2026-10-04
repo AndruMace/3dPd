@@ -5,11 +5,10 @@ body {
   overflow: hidden;
   background: #000;
   color: #fff;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 13px;
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 #game {
   position: fixed;
@@ -19,103 +18,307 @@ body {
   display: block;
   touch-action: none;
 }
+/* Measured by the UI to keep the pixel layer clear of notches and home indicators. */
+#safe-area {
+  position: fixed;
+  top: env(safe-area-inset-top);
+  right: env(safe-area-inset-right);
+  bottom: env(safe-area-inset-bottom);
+  left: env(safe-area-inset-left);
+  pointer-events: none;
+  visibility: hidden;
+}
 #hud {
   position: fixed;
   inset: 0;
   pointer-events: none;
 }
-.hud {
+.safe-root {
   position: absolute;
-  inset: 0;
-  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom))
-    max(8px, env(safe-area-inset-left));
 }
-.status {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: min(220px, 60vw);
+
+/* ---- Pixel UI: laid out in PD's UI pixels, scaled up by an integer zoom ---- */
+.pixel-root {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.pixel-root * {
+  box-sizing: border-box;
+}
+.pixel-img {
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  flex: none;
+}
+.pixel-nine {
+  image-rendering: pixelated;
+  border-image-repeat: stretch;
+}
+.pixel-text {
+  display: block;
+  flex: none;
+  image-rendering: pixelated;
+}
+
+/* Status pane */
+.status-pane {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 64px;
+}
+.status-pane .touch,
+.status-pane .tag {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
 }
 .hp-bar {
-  position: relative;
-  height: 14px;
-  background: #400;
-  border: 1px solid #000;
-  box-shadow: 0 0 0 1px #555;
-}
-.hp-fill {
-  height: 100%;
-  background: #c22;
+  position: absolute;
+  height: 4px;
+  background: url('/assets/img/hp_bar.png') no-repeat 0 0;
   transition: width 0.2s;
 }
-.hp-text {
+.xp-bar {
   position: absolute;
-  inset: 0;
-  text-align: center;
-  font-size: 11px;
-  line-height: 14px;
-  text-shadow: 0 1px 1px #000;
+  height: 1px;
+  background: url('/assets/img/exp_bar.png') repeat-x 0 0;
 }
-.badges {
+.buffs {
+  position: absolute;
   display: flex;
-  gap: 10px;
-  text-shadow: 0 1px 2px #000;
 }
-.log {
-  position: absolute;
-  left: max(8px, env(safe-area-inset-left));
-  right: 8px;
-  bottom: calc(max(8px, env(safe-area-inset-bottom)) + 52px);
-  text-shadow: 0 1px 2px #000;
-  line-height: 1.35;
-}
+
+/* Toolbar */
 .toolbar {
   position: absolute;
-  right: max(8px, env(safe-area-inset-right));
-  bottom: max(8px, env(safe-area-inset-bottom));
+  left: 0;
+  bottom: 0;
+  height: 25px;
+}
+.tool {
+  position: absolute;
+  bottom: 0;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.tool:active > .pixel-img:first-child {
+  filter: brightness(1.3);
+}
+.tool.disabled > .pixel-img:first-child {
+  filter: brightness(0.6);
+}
+.tool-active {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.25);
+}
+.quickslot {
+  position: absolute;
+  inset: 0;
+}
+
+/* Game log, above the toolbar */
+.game-log {
+  position: absolute;
+  left: 0;
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 1px;
+}
+
+/* Toast (cell selection prompt) */
+.toast-wrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+}
+.toast {
   pointer-events: auto;
 }
-.toolbar button,
-.death button {
-  min-width: 44px;
-  height: 44px;
-  font: inherit;
-  font-size: 20px;
-  color: #fff;
-  background: #2a2a2acc;
-  border: 1px solid #666;
-  border-radius: 4px;
+.toast-inner {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
 }
-.toolbar button:disabled {
-  opacity: 0.45;
+.toast-close {
+  cursor: pointer;
 }
-.fade {
+
+/* Windows */
+.wnd-blocker {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+.wnd-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-height: 100%;
+}
+.wnd {
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
+}
+.wnd-content {
+  display: flex;
+  flex-direction: column;
+}
+.wnd-below {
+  display: flex;
+}
+.tabs {
+  display: flex;
+  gap: 1px;
+}
+.tab {
+  cursor: pointer;
+}
+.bag-grid {
+  display: grid;
+}
+.item-slot {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.durability {
+  position: absolute;
+  left: 2px;
+  bottom: 1px;
+  display: flex;
+  gap: 1px;
+}
+.durability > div {
+  width: 2px;
+  height: 1px;
+}
+.item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 2px;
+}
+.item-actions > .red-button {
+  flex: 1 1 calc(50% - 1px);
+}
+.red-button {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.red-button:active {
+  filter: brightness(1.25);
+}
+.red-button.disabled {
+  cursor: default;
+}
+.red-button-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.icon-title {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 16px;
+}
+.icon-title-icon {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  min-width: 16px;
+}
+.icon-title-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.health-bar {
+  height: 2px;
+  background: #cc0000;
+}
+.health-bar > div {
+  height: 100%;
+  background: #00ee00;
+}
+.buffs-row {
+  display: flex;
+  gap: 1px;
+  margin-top: 2px;
+}
+.stat-row {
+  position: relative;
+  height: 10px;
+}
+.buff-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 10px;
+}
+
+/* Game over, interlevel and flashes */
+.game-over {
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.6);
+}
+.interlevel {
   position: absolute;
   inset: 0;
   background: #000;
-  opacity: 0;
-  transition: opacity 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  animation: fade-in 0.2s;
 }
-.fade.on {
-  opacity: 1;
-}
-.death {
+.screen-flash {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-content: center;
-  gap: 12px;
-  text-align: center;
-  background: #000a;
-  font-size: 16px;
-  pointer-events: auto;
+  opacity: 0;
+  animation: flash 0.6s ease-out;
 }
-.death button {
-  font-size: 14px;
-  padding: 0 16px;
+@keyframes flash {
+  from {
+    opacity: 0.8;
+  }
+  to {
+    opacity: 0;
+  }
 }
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Floating combat text (screen-space, unscaled) */
 .floating-text-layer {
   position: absolute;
   inset: 0;
@@ -126,6 +329,7 @@ body {
   position: absolute;
   left: 0;
   top: 0;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-weight: bold;
   font-size: 14px;
   text-shadow:

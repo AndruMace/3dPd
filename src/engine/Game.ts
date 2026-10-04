@@ -9,7 +9,7 @@ import { QuickSlot } from './QuickSlot';
 import { Actor } from './actors/Actor';
 import { Hero, type HeroClass } from './actors/hero/Hero';
 import { Ghost } from './actors/mobs/npcs';
-import { Bundle } from './core/Bundle';
+import { Bundle, classNameOf } from './core/Bundle';
 import { Events, GLog, type GameEvent } from './core/events';
 import { Fx, Sample } from './core/fx';
 import { Random, type RandomState } from './core/Random';
@@ -176,6 +176,37 @@ export const Game = {
         break;
     }
     afterHeroAction();
+  },
+
+  /** The item in the quickslot (a stackable item is remembered by class and found again in the backpack). */
+  quickslotItem(): Item | null {
+    const v = QuickSlot.primaryValue;
+    if (v === null) return null;
+    for (const item of Dungeon.hero.belongings.all()) {
+      if (typeof v === 'string' ? classNameOf(item) === v : item === v) return item;
+    }
+    return null;
+  },
+
+  /** QuickSlot's WndBag (QUICKSLOT mode) picked an item. */
+  setQuickslot(uid: number): void {
+    const item = Game.findItem(uid);
+    if (item) QuickSlot.primaryValue = item.stackable ? classNameOf(item) : item;
+  },
+
+  /**
+   * The quickslot button: use the item's default action, or, when that action is already waiting for a
+   * target, fire at the last target (PD's auto-aim).
+   */
+  useQuickslot(): void {
+    const p = UI.pending;
+    if (p && p.kind === 'cell') {
+      const target = QuickSlot.lastTarget;
+      if (target !== -1 && Dungeon.visible[target] && Actor.findChar(target)) Game.answer(target);
+      return;
+    }
+    const item = Game.quickslotItem();
+    if (item && item.defaultAction !== null) Game.itemAction(item.uid, item.defaultAction);
   },
 
   findItem(uid: number): Item | null {
@@ -472,7 +503,7 @@ function switchLevel(level: Level, pos: number, mode: Mode): void {
       const chapter = CHAPTERS[Dungeon.depth];
       if (chapter && !Dungeon.chapters.has(chapter[0])) {
         Dungeon.chapters.add(chapter[0]);
-        UI.message(chapter[1]);
+        UI.request({ kind: 'message', text: chapter[1], story: true });
       }
       break;
     }

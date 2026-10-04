@@ -1,6 +1,11 @@
 import { h, render } from 'preact';
 import { GameController } from './app/GameController';
-import { Hud } from './ui/Hud';
+import { Dungeon } from './engine/Dungeon';
+import { Game } from './engine/Game';
+import { Storage } from './platform/storage';
+import { GameUI } from './ui/GameUI';
+import { preloadChrome } from './ui/pixel/components';
+import { loadFonts } from './ui/pixel/font';
 import './style.css';
 
 const root = document.getElementById('game')!;
@@ -10,10 +15,16 @@ const game = new GameController(root);
 const params = new URLSearchParams(location.search);
 const newSeed = () => params.get('seed') ?? Math.floor(Math.random() * 1e9);
 
-const draw = () => render(h(Hud, { state: game.hud, game, onRestart: () => game.start(newSeed()) }), hudRoot);
-game.onHud = draw;
-game.start(newSeed());
-draw();
+const newGame = () => {
+  void Storage.remove('game');
+  game.start(newSeed());
+};
+
+void (async () => {
+  await Promise.all([loadFonts(), preloadChrome()]);
+  render(h(GameUI, { game, onNewGame: newGame }), hudRoot);
+  if (params.has('seed') || !(await game.resume())) game.start(newSeed());
+})();
 
 // Exposed for debugging in the console.
-Object.assign(window, { game });
+Object.assign(window, { game, Game, Dungeon });

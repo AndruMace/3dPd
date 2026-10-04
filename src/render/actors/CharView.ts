@@ -1,6 +1,7 @@
 // The view of one character: its voxel flipbook plus PD's CharSprite behaviours (move tween, facing, attack,
 // death fade, damage flash, hop on the spot).
 import * as THREE from 'three';
+import type { CharState } from '../../engine/core/events';
 import { WIDTH } from '../../engine/levels/constants';
 import { VoxelSprite } from './VoxelSprite';
 
@@ -19,6 +20,15 @@ export class CharView extends THREE.Group {
   private moveFrom = new THREE.Vector3();
   private moveTo = new THREE.Vector3();
   private moveT = 1;
+  private moveDuration = MOVE_INTERVAL;
+  /** Arc height of the current tween (jumps); 0 for walking. */
+  private moveArc = 0;
+  /** Falling into a chasm: shrink and sink. */
+  private falling = 0;
+  private fadeTarget = 1;
+  private fadeSpeed = 0;
+  readonly states = new Set<CharState>();
+  private t = Math.random() * 10;
   private dying = false;
   private fade = 1;
   private flashT = 0;
@@ -52,12 +62,38 @@ export class CharView extends THREE.Group {
   }
 
   move(from: number, to: number, camera: THREE.Camera): void {
+    this.tween(from, to, MOVE_INTERVAL, 0);
+    this.turnTo(from, to, camera);
+    this.sprite.play('run');
+  }
+
+  /** A position tween without the run animation (Pushing, Swap, jump arcs). Returns its duration. */
+  tween(from: number, to: number, duration: number, arc: number): number {
     this.pos = to;
     cellToWorld(from, this.moveFrom);
     cellToWorld(to, this.moveTo);
     this.moveT = 0;
-    this.turnTo(from, to, camera);
-    this.sprite.play('run');
+    this.moveDuration = duration;
+    this.moveArc = arc;
+    return duration;
+  }
+
+  /** CharSprite.fall(): drop into a chasm (scale down and sink), then vanish. */
+  fall(): number {
+    this.falling = 0.001;
+    return 0.5;
+  }
+
+  /** AlphaTweener: fade to `alpha` over `duration` seconds. */
+  fadeTo(alpha: number, duration: number): void {
+    this.fadeTarget = alpha;
+    this.fadeSpeed = duration > 0 ? Math.abs(alpha - this.fade) / duration : Infinity;
+  }
+
+  setState(state: CharState, on: boolean): void {
+    if (on) this.states.add(state);
+    else this.states.delete(state);
+    if (state === 'INVISIBLE') this.fadeTo(on ? 0.4 : 1, 0.4);
   }
 
   /** PD flips the sprite to face left when the target is to the left on screen. */
@@ -91,18 +127,49 @@ export class CharView extends THREE.Group {
   }
 
   update(dt: number, camera: THREE.Camera): void {
+    this.t += dt;
     if (this.moveT < 1) {
-      this.moveT = Math.min(1, this.moveT + dt / MOVE_INTERVAL);
+      this.moveT = Math.min(1, this.moveT + dt / this.moveDuration);
       this.position.lerpVectors(this.moveFrom, this.moveTo, this.moveT);
-      if (this.moveT >= 1 && !this.dying) this.sprite.play('idle');
+      this.position.y = this.moveArc * 4 * this.moveT * (1 - this.moveT);
+      if (this.moveT >= 1 && !this.dying && this.sprite.clip.anim === this.sprite.def.animations.run)
+        this.sprite.play('idle');
     }
+    // CharSprite.onComplete: one-shot actions return to idle.
+    const anims = this.sprite.def.animations;
+    const cur = this.sprite.clip.anim;
+    if (!this.dying && this.sprite.clip.finished && cur && cur !== anims.die && cur !== anims.idle && cur !== anims.run)
+      this.sprite.play('idle');
     if (this.dying && this.sprite.clip.finished) this.fade -= dt / 1.0;
-    this.sprite.update(dt, camera);
+    else if (this.fade !== this.fadeTarget && !this.dying) {
+      const step = this.fadeSpeed * dt;
+      this.fade =
+        Math.abs(this.fadeTarget - this.fade) <= step
+          ? this.fadeTarget
+          : this.fade + Math.sign(this.fadeTarget - this.fade) * step;
+    }
+    if (this.falling > 0) {
+      this.falling += dt;
+      const k = Math.max(0, 1 - this.falling / 0.5);
+      this.sprite.scale.setScalar(k);
+      this.position.y = -(1 - k) * 1.5;
+      if (k === 0) this.fade = 0;
+      this.dying = this.dying || k === 0;
+    }
+    // Paralysed and frozen characters stop animating.
+    const frozen = this.states.has('PARALYSED') || this.states.has('FROZEN');
+    this.sprite.update(frozen ? 0 : dt, camera);
+    if (this.states.has('LEVITATING') && this.moveT >= 1 && this.falling === 0)
+      this.sprite.position.y = 0.25 + Math.sin(this.t * 3) * 0.06;
+    else this.sprite.position.y = 0;
 
     const mat = this.sprite.material;
     const flashing = this.flashT > 0;
     this.flashT -= dt;
     mat.emissiveIntensity = flashing ? 1 : 0;
+    if (this.states.has('FROZEN')) mat.color.setRGB(0.6, 0.8, 1.6);
+    else if (this.states.has('ILLUMINATED')) mat.color.setRGB(1.3, 1.3, 1.1);
+    else mat.color.setRGB(1, 1, 1);
     mat.opacity = Math.max(0, this.fade);
     mat.transparent = this.fade < 1;
     this.visible = this.seen && !this.gone;

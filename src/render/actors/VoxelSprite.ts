@@ -58,6 +58,11 @@ export class VoxelSprite extends THREE.Group {
     this.mesh.scale.x = this.flipped ? -1 : 1;
   }
 
+  setTier(tier: number): void {
+    this.tier = tier;
+    this.showFrame(this.pendingFrame);
+  }
+
   private showFrame(frame: number): void {
     this.pendingFrame = frame;
     if (!this.sheet) return;

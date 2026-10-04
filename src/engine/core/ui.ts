@@ -30,7 +30,15 @@ export type Prompt =
       onSelect: (index: number) => void;
     }
   /** Plain information windows (WndMessage, WndStory, sign text, quest text). */
-  | { kind: 'message'; title?: string; sprite?: string; itemImage?: number; text: string; onClose?: () => void };
+  | {
+      kind: 'message';
+      title?: string;
+      sprite?: string;
+      itemImage?: number;
+      text: string;
+      story?: boolean;
+      onClose?: () => void;
+    };
 
 let pending: Prompt | null = null;
 const queue: Prompt[] = [];
