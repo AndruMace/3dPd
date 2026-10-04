@@ -1,4 +1,6 @@
 // Port of levels/Room.java: a rectangle (walls included) in the level's room graph.
+import type { Bundlable, Bundle } from '../core/Bundle';
+import { registerClass } from '../core/Bundle';
 import { Point, Rect } from '../core/geom';
 import type { GraphNode } from '../core/Graph';
 import { Random } from '../core/Random';
@@ -63,7 +65,7 @@ const INITIAL_SPECIALS: RoomType[] = [
 /** Run-wide ordering of special room types: recently used types move to the back. */
 export const SPECIALS: RoomType[] = [...INITIAL_SPECIALS];
 
-export class Room extends Rect implements GraphNode {
+export class Room extends Rect implements GraphNode, Bundlable {
   neigbours = new Set<Room>();
   connected = new Map<Room, Door | null>();
   distance = 0;
@@ -117,6 +119,32 @@ export class Room extends Rect implements GraphNode {
     return this.neigbours;
   }
 
+  storeInBundle(bundle: Bundle): void {
+    bundle.put('left', this.left);
+    bundle.put('top', this.top);
+    bundle.put('right', this.right);
+    bundle.put('bottom', this.bottom);
+    bundle.put('type', this.type);
+  }
+
+  restoreFromBundle(bundle: Bundle): void {
+    this.left = bundle.getInt('left');
+    this.top = bundle.getInt('top');
+    this.right = bundle.getInt('right');
+    this.bottom = bundle.getInt('bottom');
+    this.type = bundle.getEnum<RoomType>('type', 'NULL');
+  }
+
+  static storeRoomsInBundle(bundle: Bundle): void {
+    bundle.put('rooms', [...SPECIALS]);
+  }
+
+  static restoreRoomsFromBundle(bundle: Bundle): void {
+    if (bundle.contains('rooms'))
+      SPECIALS.splice(0, SPECIALS.length, ...(bundle.getStringArray('rooms') as RoomType[]));
+    else Room.shuffleTypes();
+  }
+
   static shuffleTypes(): void {
     SPECIALS.splice(0, SPECIALS.length, ...INITIAL_SPECIALS);
     const size = SPECIALS.length;
@@ -134,3 +162,5 @@ export class Room extends Rect implements GraphNode {
     }
   }
 }
+
+registerClass('Room', Room);

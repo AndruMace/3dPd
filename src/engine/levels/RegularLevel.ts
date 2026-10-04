@@ -2,6 +2,7 @@
 import { Dungeon } from '../Dungeon';
 import { Actor } from '../actors/Actor';
 import { Bestiary } from '../actors/mobs/Bestiary';
+import type { Bundle } from '../core/Bundle';
 import { Rect } from '../core/geom';
 import { Graph } from '../core/Graph';
 import { Random } from '../core/Random';
@@ -9,7 +10,8 @@ import { Generator } from '../items/Generator';
 import type { HeapType } from '../items/Heap';
 import { LENGTH, NEIGHBOURS8, WIDTH } from './constants';
 import { Level } from './Level';
-import { paintEntrance, paintExit } from './painters/EntranceExitPainter';
+import { paintBossExit, paintEntrance, paintExit } from './painters/EntranceExitPainter';
+import * as SP from './painters/SpecialPainters';
 import { fill, fillRect } from './painters/Painter';
 import { paintStandard } from './painters/StandardPainter';
 import { paintPassage, paintTunnel } from './painters/TunnelPainter';
@@ -18,13 +20,30 @@ import { Terrain } from './Terrain';
 
 type RoomPainter = (level: Level, room: Room) => void;
 
-/** Painters ported so far. Special rooms without one yet are painted as standard rooms (M2 ports the rest). */
+/** Room.Type -> painter. SHOP and BLACKSMITH arrive with the Prison (depth 6+). */
 const PAINTERS: Partial<Record<RoomType, RoomPainter>> = {
   STANDARD: paintStandard,
   ENTRANCE: paintEntrance,
   EXIT: paintExit,
+  BOSS_EXIT: paintBossExit,
   TUNNEL: paintTunnel,
   PASSAGE: paintPassage,
+  TREASURY: SP.paintTreasury,
+  ARMORY: SP.paintArmory,
+  LIBRARY: SP.paintLibrary,
+  LABORATORY: SP.paintLaboratory,
+  VAULT: SP.paintVault,
+  TRAPS: SP.paintTraps,
+  STORAGE: SP.paintStorage,
+  MAGIC_WELL: SP.paintMagicWell,
+  GARDEN: SP.paintGarden,
+  CRYPT: SP.paintCrypt,
+  STATUE: SP.paintStatue,
+  POOL: SP.paintPool,
+  RAT_KING: SP.paintRatKing,
+  WEAK_FLOOR: SP.paintWeakFloor,
+  PIT: SP.paintPit,
+  ALTAR: SP.paintAltar,
 };
 
 export abstract class RegularLevel extends Level {
@@ -448,9 +467,25 @@ export abstract class RegularLevel extends Level {
     return null;
   }
 
-  room(pos: number): Room | null {
+  roomAt(pos: number): Room | null {
     for (const room of this.rooms) if (room.type !== 'NULL' && room.inside(pos)) return room;
     return null;
+  }
+
+  storeInBundle(bundle: Bundle): void {
+    super.storeInBundle(bundle);
+    bundle.put('rooms', this.rooms);
+  }
+
+  restoreFromBundle(bundle: Bundle): void {
+    super.restoreFromBundle(bundle);
+    this.rooms = new Set(bundle.getCollection<Room>('rooms'));
+    for (const r of this.rooms) {
+      if (r.type === 'WEAK_FLOOR') {
+        Level.weakFloorCreated = true;
+        break;
+      }
+    }
   }
 
   protected randomDropCell(): number {

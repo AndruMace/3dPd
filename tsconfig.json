@@ -7,7 +7,7 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
+    "noFallthroughCasesInSwitch": false,
     "skipLibCheck": true,
     "jsx": "react-jsx",
     "jsxImportSource": "preact",

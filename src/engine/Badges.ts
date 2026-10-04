@@ -1,0 +1,38 @@
+// Placeholder for Badges.java. The validate* hooks are called from the same places as in the original; the
+// badge rules and persistence are implemented in M6.
+import type { Item } from './items/Item';
+
+export const Badges = {
+  validateItemLevelAquired(_item: Item): void {},
+  validateGoldCollected(): void {},
+  validateFoodEaten(): void {},
+  validatePotionsCooked(): void {},
+  validateMonstersSlain(): void {},
+  validateLevelReached(): void {},
+  validateStrengthAttained(): void {},
+  validateMasteryCombo(_count: number): void {},
+  validateAllBagsBought(_bag: Item): void {},
+  validateDeathFromFire(): void {},
+  validateDeathFromPoison(): void {},
+  validateDeathFromGas(): void {},
+  validateDeathFromHunger(): void {},
+  validateDeathFromGlyph(): void {},
+  validateDeathFromFalling(): void {},
+  validateNightHunter(): void {},
+  validatePiranhasKilled(): void {},
+  validateBossSlain(): void {},
+  validateRare(_mob: unknown): void {},
+  validateVictory(): void {},
+  validateGrimWeapon(): void {},
+  validateNoKilling(): void {},
+  validateItemsIdentified(): void {},
+  validateAllPotionsIdentified(): void {},
+  validateAllScrollsIdentified(): void {},
+  validateAllRingsIdentified(): void {},
+  validateAllWandsIdentified(): void {},
+  validateRingOfHaggler(): void {},
+  validateRingOfThorns(): void {},
+  validateMastery(): void {},
+  validateSupporter(): void {},
+  validateTutorial(): void {},
+};

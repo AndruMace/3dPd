@@ -1,5 +1,9 @@
 // Port of levels/SewerLevel.java.
+import { Dungeon } from '../Dungeon';
+import { Ghost } from '../actors/mobs/npcs';
+import { registerClass } from '../core/Bundle';
 import { Random } from '../core/Random';
+import { DewVial } from '../items/misc';
 import { LENGTH, WIDTH } from './constants';
 import { generatePatch } from './Patch';
 import { RegularLevel } from './RegularLevel';
@@ -63,7 +67,33 @@ export class SewerLevel extends RegularLevel {
     }
   }
 
+  protected createMobs(): void {
+    super.createMobs();
+    Ghost.Quest.spawn(this);
+  }
+
+  protected createItems(): void {
+    if (Dungeon.dewVial && Random.Int(4 - Dungeon.depth) === 0) {
+      this.addItemToSpawn(new DewVial());
+      Dungeon.dewVial = false;
+    }
+    super.createItems();
+  }
+
   tileName(tile: number): string {
     return tile === Terrain.WATER ? 'Murky water' : super.tileName(tile);
   }
+
+  tileDesc(tile: number): string {
+    switch (tile) {
+      case Terrain.EMPTY_DECO:
+        return 'Wet yellowish moss covers the floor.';
+      case Terrain.BOOKSHELF:
+        return 'The bookshelf is packed with cheap useless books. Might it burn?';
+      default:
+        return super.tileDesc(tile);
+    }
+  }
 }
+
+registerClass('SewerLevel', SewerLevel);

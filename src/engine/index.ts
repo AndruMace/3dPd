@@ -1,0 +1,35 @@
+// Loads every engine module in dependency order so all classes are registered (for saves and late binding)
+// before the game starts. Import the engine through this module or Game.ts.
+import './actors/Actor';
+import './actors/Char';
+import './actors/buffs/Buff';
+import './actors/buffs/buffs';
+import './actors/blobs/Blob';
+import './actors/blobs/blobs';
+import './items/Item';
+import './items/weapon/Weapon';
+import './items/weapon/enchantments';
+import './items/weapon/melee';
+import './items/weapon/missiles';
+import './items/armor/Armor';
+import './items/armor/glyphs';
+import './items/bags';
+import './items/Heap';
+import './items/misc';
+import './items/keys';
+import './items/food';
+import './items/potions/potions';
+import './items/scrolls/scrolls';
+import './items/wands/wands';
+import './items/rings/rings';
+import './plants/plants';
+import './items/Generator';
+import './items/transmutation';
+import './actors/mobs/Mob';
+import './actors/mobs/npcs';
+import './actors/mobs/mobs';
+import './actors/mobs/Bestiary';
+import './actors/hero/Hero';
+import './levels/Room';
+import './levels/SewerLevel';
+import './levels/SewerBossLevel';

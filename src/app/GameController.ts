@@ -287,7 +287,7 @@ export class GameController {
       case 'heroDied':
         this.pushHud({ dead: true });
         return 0;
-      case 'sound':
+      default:
         return 0;
     }
   }

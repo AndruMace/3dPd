@@ -7,7 +7,7 @@ import { Terrain as T } from '../../src/engine/levels/Terrain';
 const seed = process.argv[2] ?? 'ascii';
 const depth = Number(process.argv[3] ?? 1);
 Game.newGame({ seed, heroClass: 'WARRIOR' });
-for (let d = 1; d < depth; d++) Game.descend();
+for (let d = 1; d < depth; d++) Game.debugDescend();
 const lvl = Dungeon.level;
 const glyph = (t: number): string => {
   if (t >= T.WATER_TILES) return '~';

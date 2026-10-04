@@ -66,7 +66,7 @@ describe('Sewer level generation', () => {
     for (let seed = 0; seed < 150; seed++) {
       Game.newGame({ seed, heroClass: 'WARRIOR' });
       for (let depth = 1; depth <= 4; depth++) {
-        if (depth > 1) Game.descend();
+        if (depth > 1) Game.debugDescend();
         const level = Dungeon.level;
         expect(Dungeon.depth).toBe(depth);
 
@@ -115,6 +115,10 @@ describe('Turn loop', () => {
         Game.continue();
         continue;
       }
+      if (Game.prompt) {
+        Game.answer(Game.prompt.kind === 'options' ? 0 : null);
+        continue;
+      }
       if (Game.transition()) continue;
       Dungeon.level.mapped.fill(1); // the bot doesn't explore; let it path anywhere it could see
       expect(Game.isReady()).toBe(true);
@@ -126,6 +130,7 @@ describe('Turn loop', () => {
         const before = Actor.now();
         Game.handle(Dungeon.level.exit);
         if (Game.isReady() && Actor.now() === before) Game.rest();
+        if (Game.prompt) Game.answer(null);
       }
       Game.drainEvents();
     }
@@ -141,8 +146,68 @@ describe('Turn loop', () => {
   it('emits events the view can replay', () => {
     Game.newGame({ seed: 7, heroClass: 'WARRIOR' });
     const events = Game.drainEvents();
-    expect(events[0]).toMatchObject({ type: 'level', depth: 1 });
+    expect(events.find((e) => e.type === 'level')).toMatchObject({ type: 'level', depth: 1 });
     expect(events.some((e) => e.type === 'observe')).toBe(true);
+    // The Sewers story chapter is shown first, as in PD.
+    expect(Game.prompt?.kind).toBe('message');
+    Game.answer(null);
     expect(Game.isReady()).toBe(true);
+  });
+});
+
+describe('Items and saves', () => {
+  it('starts the warrior with the original kit', () => {
+    Game.newGame({ seed: 1, heroClass: 'WARRIOR' });
+    const hero = Dungeon.hero;
+    expect(hero.STR()).toBe(11);
+    expect(hero.belongings.weapon?.name_()).toBe('short sword');
+    expect(hero.belongings.armor?.name_()).toBe('cloth armor');
+    const names = hero.belongings.backpack.items.map((i) => i.toString());
+    expect(names).toEqual(expect.arrayContaining(['ration of food', 'dart x8 :10', 'key ring']));
+  });
+
+  it('eats, drinks and reads through the item pipeline', () => {
+    Game.newGame({ seed: 2, heroClass: 'WARRIOR' });
+    while (Game.prompt) Game.answer(null);
+    const hero = Dungeon.hero;
+    const food = hero.belongings.backpack.items.find((i) => i.toString() === 'ration of food')!;
+    const before = Actor.now();
+    Game.itemAction(food.uid, 'EAT');
+    expect(hero.belongings.backpack.items.includes(food)).toBe(false);
+    expect(Actor.now()).toBeGreaterThan(before);
+  });
+
+  it('round-trips a run through save and load', () => {
+    Game.newGame({ seed: 'save', heroClass: 'WARRIOR' });
+    while (Game.prompt) Game.answer(null);
+    Game.debugDescend();
+    while (Game.prompt) Game.answer(null);
+    const saved = Game.save();
+    const map = Dungeon.level.map.slice();
+    const heroPos = Dungeon.hero.pos;
+    const mobs = [...Dungeon.level.mobs].map((m) => `${m.constructor.name}@${m.pos}:${m.HP}`).sort();
+    const pack = Dungeon.hero.belongings.backpack.items.map((i) => i.toString());
+
+    Game.newGame({ seed: 'other', heroClass: 'MAGE' });
+    Game.load(JSON.parse(JSON.stringify(saved)));
+    expect(Dungeon.depth).toBe(2);
+    expect(Dungeon.level.map).toEqual(map);
+    expect(Dungeon.hero.pos).toBe(heroPos);
+    expect(Dungeon.hero.heroClass).toBe('WARRIOR');
+    expect([...Dungeon.level.mobs].map((m) => `${m.constructor.name}@${m.pos}:${m.HP}`).sort()).toEqual(mobs);
+    expect(Dungeon.hero.belongings.backpack.items.map((i) => i.toString())).toEqual(pack);
+
+    // Going back up restores the first level from its saved bundle.
+    Dungeon.hero.pendingTransition = 'ascend';
+    Game.transition();
+    expect(Dungeon.depth).toBe(1);
+  });
+
+  it('generates the Goo level with its boss', () => {
+    Game.newGame({ seed: 'goo', heroClass: 'WARRIOR' });
+    for (let d = 1; d < 5; d++) Game.debugDescend();
+    expect(Dungeon.depth).toBe(5);
+    expect([...Dungeon.level.mobs].some((m) => m.name === 'Goo')).toBe(true);
+    expect(Dungeon.level.map[Dungeon.level.exit]).toBe(Terrain.LOCKED_EXIT);
   });
 });

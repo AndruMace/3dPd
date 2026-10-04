@@ -3,7 +3,7 @@ import { Dungeon } from '../../Dungeon';
 import type { Point } from '../../core/geom';
 import { Random } from '../../core/Random';
 import { Generator } from '../../items/Generator';
-import { Gold } from '../../items/Gold';
+import { Gold } from '../../items/misc';
 import { WIDTH } from '../constants';
 import type { Level } from '../Level';
 import type { Room } from '../Room';

@@ -4,6 +4,7 @@
 // sprite animation to call next(), the port resolves the action immediately and returns true; the view replays
 // the emitted events afterwards. act() returning false now only means "the hero is waiting for input".
 import { Dungeon } from '../Dungeon';
+import type { Bundlable, Bundle } from '../core/Bundle';
 import { LENGTH } from '../levels/constants';
 import type { Char } from './Char';
 
@@ -15,9 +16,19 @@ const ids = new Map<number, Actor>();
 let now = 0;
 const chars: (Char | null)[] = new Array(LENGTH).fill(null);
 
-export abstract class Actor {
+export abstract class Actor implements Bundlable {
   time = 0;
   private _id = 0;
+
+  storeInBundle(bundle: Bundle): void {
+    bundle.put('time', this.time);
+    bundle.put('id', this._id);
+  }
+
+  restoreFromBundle(bundle: Bundle): void {
+    this.time = bundle.getFloat('time');
+    this._id = bundle.getInt('id');
+  }
 
   /** Act and return true to let the scheduler continue, false to stop and wait for player input. */
   protected abstract act(): boolean;
@@ -31,7 +42,7 @@ export abstract class Actor {
     this.time += time;
   }
 
-  protected postpone(time: number): void {
+  postpone(time: number): void {
     if (this.time < now + time) this.time = now + time;
   }
 
@@ -39,12 +50,12 @@ export abstract class Actor {
     return this.time - now;
   }
 
-  protected diactivate(): void {
+  diactivate(): void {
     this.time = Number.MAX_VALUE;
   }
 
-  protected onAdd(): void {}
-  protected onRemove(): void {}
+  onAdd(): void {}
+  onRemove(): void {}
 
   id(): number {
     if (this._id > 0) return this._id;
@@ -78,6 +89,7 @@ export abstract class Actor {
   static init(): void {
     Actor.addDelayed(Dungeon.hero, -Number.MIN_VALUE);
     for (const mob of Dungeon.level.mobs) Actor.add(mob);
+    for (const blob of Dungeon.level.blobs.values()) Actor.add(blob);
     current = null;
   }
 

@@ -1,15 +1,26 @@
 // Port of actors/mobs/Mob.java: the shared monster AI (SLEEPING / WANDERING / HUNTING / FLEEING / PASSIVE).
-import { Dungeon } from '../../Dungeon';
+import { Badges } from '../../Badges';
+import { Dungeon, Statistics } from '../../Dungeon';
+import type { Bundle } from '../../core/Bundle';
+import { registerClass } from '../../core/Bundle';
 import { Events, GLog } from '../../core/events';
+import { Fx } from '../../core/fx';
 import { Random } from '../../core/Random';
+import type { Category } from '../../items/Generator';
+import type { Item } from '../../items/Item';
+import { lazy } from '../../core/lazy';
 import { adjacent, distance } from '../../levels/constants';
-import { TICK } from '../Actor';
+import { Actor, TICK } from '../Actor';
+import type { Buff } from '../buffs/Buff';
+import { Amok, Sleep, Terror } from '../buffs/buffs';
 import { Char } from '../Char';
 import { findPath, flee } from '../pathing';
 
 export type AiStateName = 'SLEEPING' | 'WANDERING' | 'HUNTING' | 'FLEEING' | 'PASSIVE';
 
 const TIME_TO_WAKE_UP = 1;
+
+type Loot = Category | (new () => Item) | Item | null;
 
 export abstract class Mob extends Char {
   state: AiStateName = 'SLEEPING';
@@ -21,6 +32,21 @@ export abstract class Mob extends Char {
   protected enemySeen = false;
   protected alerted = false;
   hostile = true;
+
+  protected loot: Loot = null;
+  protected lootChance = 0;
+
+  storeInBundle(bundle: Bundle): void {
+    super.storeInBundle(bundle);
+    bundle.put('state', this.state);
+    bundle.put('target', this.target);
+  }
+
+  restoreFromBundle(bundle: Bundle): void {
+    super.restoreFromBundle(bundle);
+    this.state = bundle.getEnum<AiStateName>('state', 'SLEEPING');
+    this.target = bundle.getInt('target');
+  }
 
   protected act(): boolean {
     super.act();
@@ -55,7 +81,46 @@ export abstract class Mob extends Char {
   }
 
   protected chooseEnemy(): Char | null {
+    if (this.buff(Amok) !== null) {
+      if (this.enemy === Dungeon.hero || this.enemy === null) {
+        const enemies = new Set<Mob>();
+        for (const mob of Dungeon.level.mobs) if (mob !== this && Dungeon.level.fieldOfView[mob.pos]) enemies.add(mob);
+        if (enemies.size > 0) return Random.element(enemies);
+      }
+    }
+    const terror = this.buff(Terror);
+    if (terror !== null) {
+      const source = Actor.findById(terror.object);
+      if (source && source.isChar()) return source;
+    }
     return this.enemy !== null && this.enemy.isAlive() ? this.enemy : Dungeon.hero;
+  }
+
+  /** Moving is animated only when the hero can see it, otherwise the sprite is just placed. */
+  protected moveSprite(_from: number, _to: number): boolean {
+    return true;
+  }
+
+  add(buff: Buff): void {
+    super.add(buff);
+    if (buff instanceof Amok) {
+      this.showStatus('negative', '#$%^');
+      this.state = 'HUNTING';
+    } else if (buff instanceof Terror) {
+      this.state = 'FLEEING';
+    } else if (buff instanceof Sleep) {
+      Fx.flare(this.id(), 0x44ffff, 4);
+      this.state = 'SLEEPING';
+      this.postpone(Sleep.SWS);
+    }
+  }
+
+  remove(b: Buff | (new () => Buff)): void {
+    super.remove(b as never);
+    if (b instanceof Terror) {
+      this.showStatus('negative', '#$%^');
+      this.state = 'HUNTING';
+    }
   }
 
   protected canAttack(enemy: Char): boolean {
@@ -100,11 +165,20 @@ export abstract class Mob extends Char {
     return this.enemySeen && !this.paralysed ? this.defenseSkillValue : 0;
   }
 
+  defenseProc(enemy: Char, damage: number): number {
+    if (!this.enemySeen && enemy === Dungeon.hero && Dungeon.hero.subClass === 'ASSASSIN') {
+      damage += Random.Int(1, damage);
+      Fx.at('wound', this.pos);
+    }
+    return damage;
+  }
+
   aggro(ch: Char): void {
     this.enemy = ch;
   }
 
   damage(dmg: number, src: object): void {
+    Terror.recover(this);
     if (this.state === 'SLEEPING') this.state = 'WANDERING';
     this.alerted = true;
     super.damage(dmg, src);
@@ -114,6 +188,14 @@ export abstract class Mob extends Char {
     super.destroy();
     Dungeon.level.mobs.delete(this);
     if (Dungeon.hero.isAlive()) {
+      if (this.hostile) {
+        Statistics.enemiesSlain++;
+        Badges.validateMonstersSlain();
+        Statistics.qualifiedForNoKilling = false;
+        if (Dungeon.nightMode) Statistics.nightHunt++;
+        else Statistics.nightHunt = 0;
+        Badges.validateNightHunter();
+      }
       const exp = this.exp();
       if (exp > 0) {
         Dungeon.hero.showStatus('positive', `+${exp}EXP`);
@@ -129,11 +211,21 @@ export abstract class Mob extends Char {
   die(cause: object | null): void {
     super.die(cause);
     if (Dungeon.hero.lvl <= this.maxLvl + 2) this.dropLoot();
-    if (Dungeon.hero.isAlive() && !Dungeon.visible[this.pos]) GLog.i('You hear something died in the distance.');
+    if (Dungeon.hero.isAlive() && !Dungeon.visible[this.pos]) GLog.i('You hear something died in the distance');
   }
 
-  protected dropLoot(): void {}
+  protected dropLoot(): void {
+    if (this.loot !== null && Random.Float() < this.lootChance) {
+      const Generator = lazy<{ random(cat: Category): Item; randomOf(cl: new () => Item): Item }>('Generator');
+      let item: Item;
+      if (typeof this.loot === 'string') item = Generator.random(this.loot);
+      else if (typeof this.loot === 'function') item = Generator.randomOf(this.loot);
+      else item = this.loot;
+      Dungeon.level.drop(item, this.pos).dropFX(this.pos);
+    }
+  }
 
+  /** Called when the hero returns to a level: true keeps this mob. */
   reset(): boolean {
     return false;
   }
@@ -157,14 +249,25 @@ export abstract class Mob extends Char {
   }
 
   status(): string {
-    return `This ${this.name} is ${this.state.toLowerCase()}`;
+    switch (this.state) {
+      case 'SLEEPING':
+        return `This ${this.name} is sleeping`;
+      case 'WANDERING':
+        return `This ${this.name} is wandering`;
+      case 'HUNTING':
+        return `This ${this.name} is hunting`;
+      case 'FLEEING':
+        return `This ${this.name} is fleeing`;
+      case 'PASSIVE':
+        return `This ${this.name} is passive`;
+    }
   }
 
-  // ---- AI states ----
+  // ---- AI states (overridable, as PD subclasses replaced state objects) ----
 
-  private actSleeping(enemyInFOV: boolean): boolean {
-    const enemy = this.enemy!;
-    if (enemyInFOV && Random.Int(this.distanceTo(enemy) + enemy.stealth() + (enemy.flying ? 2 : 0)) === 0) {
+  protected actSleeping(enemyInFOV: boolean): boolean {
+    const enemy = this.enemy;
+    if (enemyInFOV && enemy && Random.Int(this.distanceTo(enemy) + enemy.stealth() + (enemy.flying ? 2 : 0)) === 0) {
       this.enemySeen = true;
       this.notice();
       this.state = 'HUNTING';
@@ -177,10 +280,11 @@ export abstract class Mob extends Char {
     return true;
   }
 
-  private actWandering(enemyInFOV: boolean, justAlerted: boolean): boolean {
-    const enemy = this.enemy!;
+  protected actWandering(enemyInFOV: boolean, justAlerted: boolean): boolean {
+    const enemy = this.enemy;
     if (
       enemyInFOV &&
+      enemy &&
       (justAlerted || Random.Int(Math.trunc(distance(this.pos, enemy.pos) / 2) + enemy.stealth()) === 0)
     ) {
       this.enemySeen = true;
@@ -189,44 +293,47 @@ export abstract class Mob extends Char {
       this.target = enemy.pos;
     } else {
       this.enemySeen = false;
+      const oldPos = this.pos;
       if (this.target !== -1 && this.getCloser(this.target)) {
         this.spend(1 / this.speed());
-      } else {
-        this.target = Dungeon.level.randomDestination();
-        this.spend(TICK);
+        return this.moveSprite(oldPos, this.pos);
       }
+      this.target = Dungeon.level.randomDestination();
+      this.spend(TICK);
     }
     return true;
   }
 
-  private actHunting(enemyInFOV: boolean): boolean {
-    const enemy = this.enemy!;
+  protected actHunting(enemyInFOV: boolean): boolean {
+    const enemy = this.enemy;
     this.enemySeen = enemyInFOV;
-    if (enemyInFOV && this.canAttack(enemy)) {
-      return this.doAttack(enemy);
-    }
-    if (enemyInFOV) this.target = enemy.pos;
+    if (enemyInFOV && enemy && this.canAttack(enemy)) return this.doAttack(enemy);
+    if (enemyInFOV && enemy) this.target = enemy.pos;
+    const oldPos = this.pos;
     if (this.target !== -1 && this.getCloser(this.target)) {
       this.spend(1 / this.speed());
-    } else {
-      this.spend(TICK);
-      this.state = 'WANDERING';
-      this.target = Dungeon.level.randomDestination();
+      return this.moveSprite(oldPos, this.pos);
     }
+    this.spend(TICK);
+    this.state = 'WANDERING';
+    this.target = Dungeon.level.randomDestination();
     return true;
   }
 
-  private actFleeing(enemyInFOV: boolean): boolean {
+  protected actFleeing(enemyInFOV: boolean): boolean {
     this.enemySeen = enemyInFOV;
-    if (enemyInFOV) this.target = this.enemy!.pos;
+    if (enemyInFOV && this.enemy) this.target = this.enemy.pos;
+    const oldPos = this.pos;
     if (this.target !== -1 && this.getFurther(this.target)) {
       this.spend(1 / this.speed());
-    } else {
-      this.spend(TICK);
-      this.nowhereToRun();
+      return this.moveSprite(oldPos, this.pos);
     }
+    this.spend(TICK);
+    this.nowhereToRun();
     return true;
   }
 
   protected nowhereToRun(): void {}
 }
+
+registerClass('Mob', Mob);

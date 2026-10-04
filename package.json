@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "refs": "tsx tools/fetch-refs.ts",
-    "assets": "tsx tools/import-assets.ts && tsx tools/extract-sprite-defs.ts"
+    "sim": "tsx tools/sim/run.ts",
+    "assets": "tsx tools/import-assets.ts && tsx tools/extract-sprite-defs.ts && tsx tools/extract-constants.ts"
   },
   "dependencies": {
     "preact": "^11.0.0",
