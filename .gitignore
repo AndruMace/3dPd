@@ -1,0 +1,7 @@
+node_modules/
+dist/
+reference/
+public/assets/
+src/content/generated/
+.DS_Store
+*.log

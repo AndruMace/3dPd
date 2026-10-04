@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>Voxel Gallery</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #111;
+        color: #eee;
+        font: 12px monospace;
+      }
+      canvas {
+        display: block;
+        touch-action: none;
+      }
+      #panel {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        right: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      #panel button,
+      #panel label {
+        background: #222a;
+        border: 1px solid #555;
+        color: #eee;
+        padding: 4px 8px;
+        font: inherit;
+        border-radius: 3px;
+      }
+      #panel button.on {
+        background: #665c1f;
+        border-color: #cc4;
+      }
+      .label {
+        color: #ddd;
+        font: 10px monospace;
+        text-shadow: 0 1px 2px #000;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="panel"></div>
+    <script type="module" src="/src/gallery/main.ts"></script>
+  </body>
+</html>
