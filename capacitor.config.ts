@@ -10,6 +10,9 @@ const config: CapacitorConfig = {
   },
   android: {
     backgroundColor: '#000000',
+    // Android 15 draws apps edge-to-edge and the WebView doesn't report the gesture-bar inset to CSS: keep the
+    // web view inside the system bars instead.
+    adjustMarginsForEdgeToEdge: 'force',
   },
 };
 

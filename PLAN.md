@@ -106,8 +106,9 @@ tools/               import-assets, voxel gallery, headless sim bot
 _Status (2026-10-04):_ M2 is feature-complete: engine, pixel UI (PD's default "Scale up UI" zoom, outlined bitmap
 text), title / hero-select / rankings / about scenes, WndRanking, settings, VFX, audio, IndexedDB save/resume,
 3D doors (jambs + panel that the wall cut-away only half-lowers), Capacitor projects. Verified in the browser
-(desktop and phone) and on the iOS Simulator (iPhone 16). Still open: the Android build needs JDK 21 on the build
-machine; on-device profiling and quality tiers move to M7; Bones and Badges stay in M6.
+(desktop and phone), on the iOS Simulator (iPhone 16) and the Android emulator (Pixel 9 Pro, API 36). Still open:
+app icon and splash (Capacitor defaults); on-device profiling and quality tiers move to M7; Bones and Badges stay
+in M6.
 
 **M3 – Prison:** Thief, Skeleton, Swarm, Shaman and Tengu, plus Mage and Rogue, the Wandmaker quest, the Tome of Mastery and subclasses, and more blobs and VFX.
 

@@ -26,7 +26,8 @@ npm run dev      # http://localhost:5173 (?seed=<anything> skips the menus into 
 - **iOS:** Xcode 16+. `npm run cap:sync`, then build the `App` scheme (Swift Package Manager, no CocoaPods), e.g.
   `xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator build`.
 - **Android:** Android SDK 35+ and **JDK 21** (Capacitor 7 compiles with `--release 21`; JDK 17 fails with
-  "invalid source release: 21"). With JDK 21 on `JAVA_HOME`: `cd android && ./gradlew assembleDebug`.
+  "invalid source release: 21"). With JDK 21 on `JAVA_HOME`: `cd android && ./gradlew assembleDebug`, e.g.
+  `JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew assembleDebug`.
 
 Controls: tap/click to move, attack, pick up or open; drag to rotate the camera, pinch/wheel to zoom.
 Keys: arrows/WASD/vi-keys/numpad to step (relative to the camera), space or `.` to wait (shift: rest), `f` search,
