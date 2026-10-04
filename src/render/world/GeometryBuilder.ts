@@ -110,6 +110,115 @@ export class GeometryBuilder {
     this.quad(c, n, [u0, v1 - (v1 - v0) * frac, u1, v1], shade, x, y, cut);
   }
 
+  /**
+   * An axis-aligned box inside cell (x, y): local extents [lx0, lz0, lx1, lz1] in 0..1, heights h0..h1. The tile is
+   * mapped world-aligned, so sub-boxes line up with the tile art (a door panel shows the door's planks, its jambs
+   * the brick frame). `faces` selects N, E, S, W and top.
+   */
+  box(
+    x: number,
+    y: number,
+    [lx0, lz0, lx1, lz1]: [number, number, number, number],
+    h0: number,
+    h1: number,
+    sideUv: [number, number, number, number],
+    topUv: [number, number, number, number],
+    topShade: number,
+    cut: number,
+    faces: [boolean, boolean, boolean, boolean, boolean] = [true, true, true, true, true],
+  ): void {
+    const sub = (uv: [number, number, number, number], a: number, b: number, c: number, d: number) => {
+      const [u0, v0, u1, v1] = uv;
+      return [u0 + (u1 - u0) * a, v0 + (v1 - v0) * c, u0 + (u1 - u0) * b, v0 + (v1 - v0) * d] as [
+        number,
+        number,
+        number,
+        number,
+      ];
+    };
+    const va = Math.max(0, Math.min(1, h0));
+    const vb = Math.max(0, Math.min(1, h1));
+    const X0 = x + lx0;
+    const X1 = x + lx1;
+    const Z0 = y + lz0;
+    const Z1 = y + lz1;
+    if (faces[0])
+      this.quad(
+        [
+          [X1, h0, Z0],
+          [X0, h0, Z0],
+          [X0, h1, Z0],
+          [X1, h1, Z0],
+        ],
+        [0, 0, -1],
+        sub(sideUv, 1 - lx1, 1 - lx0, va, vb),
+        0.7,
+        x,
+        y,
+        cut,
+      );
+    if (faces[1])
+      this.quad(
+        [
+          [X1, h0, Z1],
+          [X1, h0, Z0],
+          [X1, h1, Z0],
+          [X1, h1, Z1],
+        ],
+        [1, 0, 0],
+        sub(sideUv, 1 - lz1, 1 - lz0, va, vb),
+        0.85,
+        x,
+        y,
+        cut,
+      );
+    if (faces[2])
+      this.quad(
+        [
+          [X0, h0, Z1],
+          [X1, h0, Z1],
+          [X1, h1, Z1],
+          [X0, h1, Z1],
+        ],
+        [0, 0, 1],
+        sub(sideUv, lx0, lx1, va, vb),
+        1,
+        x,
+        y,
+        cut,
+      );
+    if (faces[3])
+      this.quad(
+        [
+          [X0, h0, Z0],
+          [X0, h0, Z1],
+          [X0, h1, Z1],
+          [X0, h1, Z0],
+        ],
+        [-1, 0, 0],
+        sub(sideUv, lz0, lz1, va, vb),
+        0.85,
+        x,
+        y,
+        cut,
+      );
+    if (faces[4])
+      this.quad(
+        [
+          [X0, h1, Z1],
+          [X1, h1, Z1],
+          [X1, h1, Z0],
+          [X0, h1, Z0],
+        ],
+        [0, 1, 0],
+        sub(topUv, lx0, lx1, 1 - lz1, 1 - lz0),
+        topShade,
+        x,
+        y,
+        cut,
+      );
+  }
+
   build(): THREE.BufferGeometry {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));

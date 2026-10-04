@@ -1,5 +1,7 @@
 // PD's Music and Sample: the original MP3s through Web Audio. Sound effects are panned by where their cell is
 // on screen (PD plays them flat; panning is the one 3D liberty taken here).
+import { Settings } from '../platform/settings';
+
 const ROOT = `${import.meta.env.BASE_URL}assets/audio/`;
 
 class AudioSystem {
@@ -8,8 +10,19 @@ class AudioSystem {
   private buffers = new Map<string, Promise<AudioBuffer | null>>();
   private musicEl: HTMLAudioElement | null = null;
   private musicFile: string | null = null;
-  musicOn = true;
-  soundOn = true;
+  get musicOn(): boolean {
+    return Settings.get().music;
+  }
+  get soundOn(): boolean {
+    return Settings.get().sound;
+  }
+
+  /** WndSettings toggled music: start or stop the current track. */
+  applySettings(): void {
+    if (!this.musicEl) return;
+    if (this.musicOn && this.ctx) void this.musicEl.play().catch(() => {});
+    else this.musicEl.pause();
+  }
 
   /** Browsers only allow audio after a user gesture: call this from the first pointer/key event. */
   unlock(): void {

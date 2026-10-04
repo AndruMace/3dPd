@@ -1,6 +1,8 @@
 // The engine's only output channel to the view: an ordered list of what happened, drained after each step.
 // The view replays these as animations; the engine itself never waits on them.
 
+import type { RankingRecord } from '../Rankings';
+
 export type StatusColor = 'default' | 'positive' | 'negative' | 'warning' | 'neutral';
 
 /** CharSprite.State: persistent visual states of a character. */
@@ -51,7 +53,9 @@ export type GameEvent =
   /** A plant grew (image = plants.png index) or withered (image -1). */
   | { type: 'plant'; pos: number; image: number }
   /** Armor tier changed (hero sprite row). */
-  | { type: 'tier'; id: number; tier: number };
+  | { type: 'tier'; id: number; tier: number }
+  /** A run ended (death without an Ankh, giving up, or victory): its rankings record. */
+  | { type: 'ranking'; record: RankingRecord };
 
 let queue: GameEvent[] = [];
 let muted = 0;

@@ -42,6 +42,8 @@ export type Answer = number | null;
 /** Saved run: the game bundle plus one bundle per visited depth (PD's game.dat + depthN.dat). */
 export interface SavedGame {
   version: number;
+  /** Dungeon.gameInfo: what StartScene shows on the "Load Game" button. */
+  info?: { depth: number; level: number; heroClass: string; challenges: boolean };
   game: string;
   levels: Record<number, string>;
 }
@@ -240,6 +242,8 @@ export const Game = {
   resurrect(accept: boolean): void {
     const hero = Dungeon.hero;
     if (!accept) {
+      // WndResurrect's "No, I give up": the run ends here, so it goes into the rankings.
+      Dungeon.submitRanking(false);
       Hero.reallyDie(null);
       return;
     }
@@ -277,7 +281,13 @@ export const Game = {
     const levels: Record<number, string> = {};
     for (const [depth, json] of savedLevels) levels[depth] = json;
     levels[Dungeon.depth] = Bundle.store(Dungeon.level).toJSON();
-    return { version: SAVE_VERSION, game: saveGameBundle().toJSON(), levels };
+    const info = {
+      depth: Dungeon.depth,
+      level: Dungeon.hero.lvl,
+      heroClass: Dungeon.hero.heroClass,
+      challenges: Dungeon.challenges !== 0,
+    };
+    return { version: SAVE_VERSION, info, game: saveGameBundle().toJSON(), levels };
   },
 
   /** Dungeon.loadGame + loadLevel + switchLevel (InterlevelScene "CONTINUE"). */

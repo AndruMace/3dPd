@@ -9,6 +9,8 @@ body {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
+  /* No double-tap zoom, so taps become clicks immediately (no 300ms delay on iOS). */
+  touch-action: manipulation;
 }
 #game {
   position: fixed;
@@ -329,13 +331,213 @@ body {
   position: absolute;
   left: 0;
   top: 0;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-weight: bold;
-  font-size: 14px;
-  text-shadow:
-    0 1px 0 #000,
-    1px 0 0 #000,
-    -1px 0 0 #000,
-    0 -1px 0 #000;
-  white-space: nowrap;
+  image-rendering: pixelated;
+}
+
+/* ---- Menu scenes ---- */
+.scene {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  pointer-events: auto;
+  overflow: hidden;
+}
+.archs,
+.archs-layer {
+  position: absolute;
+  inset: 0;
+}
+.archs-layer {
+  background-repeat: repeat;
+  image-rendering: pixelated;
+  background-position-x: center;
+  animation: archs-scroll 1.6s linear infinite;
+}
+.archs-bg {
+  background-image: url('/assets/img/arcs1.png');
+  background-size: 32px 32px;
+  --archs-h: -32px;
+}
+.archs-fg {
+  background-image: url('/assets/img/arcs2.png');
+  background-size: 64px 64px;
+  --archs-h: -64px;
+}
+@keyframes archs-scroll {
+  from {
+    background-position-y: 0;
+  }
+  to {
+    background-position-y: var(--archs-h);
+  }
+}
+.scene-button,
+.dashboard-item,
+.class-shield,
+.ranking-row {
+  cursor: pointer;
+  pointer-events: auto;
+}
+.scene-button:active,
+.dashboard-item:active {
+  filter: brightness(1.4);
+}
+.fireball {
+  position: absolute;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.title-signs {
+  mix-blend-mode: screen;
+  animation: title-signs 6.283s linear infinite;
+}
+/* TitleScene's signs: alpha = sin(-t), invisible while negative. */
+@keyframes title-signs {
+  0%,
+  50% {
+    opacity: 0;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.dashboard-item {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.class-shield {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.unlock-text {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.game-button {
+  position: absolute;
+}
+.game-button.with-secondary .red-button-inner {
+  margin-bottom: 7px;
+}
+.game-button-secondary {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.center-text {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+}
+.ranking-row {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ranking-shield {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.ranking-pos {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -40%);
+}
+.ranking-flare {
+  position: absolute;
+  left: -16px;
+  top: -16px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(rgba(102, 102, 102, 0.7) 0 15deg, transparent 15deg 60deg);
+  mask: radial-gradient(circle, #000 20%, transparent 70%);
+  animation: flare-spin 4s linear infinite;
+}
+.ranking-flare.win {
+  background: repeating-conic-gradient(rgba(136, 136, 102, 0.8) 0 15deg, transparent 15deg 60deg);
+}
+@keyframes flare-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ranking-desc {
+  flex: 1;
+}
+.ranking-class {
+  flex: none;
+  margin-left: auto;
+}
+.about-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.about-link {
+  pointer-events: auto;
+}
+.checkbox-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 2px;
+}
+.labeled-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.perks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0;
+}
+.perk {
+  display: flex;
+  gap: 2px;
+}
+.ranking-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ranking-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.item-slot.small {
+  width: 22px;
+  height: 22px;
+  cursor: default;
+}
+.rank-stat {
+  height: 9px;
 }

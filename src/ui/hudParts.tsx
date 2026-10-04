@@ -1,14 +1,7 @@
 // The in-game HUD, ported from ui/StatusPane, ui/Toolbar, ui/GameLog, ui/BuffIndicator and ui/DangerIndicator.
 import type { StatusView } from '../engine/Inspect';
 import { Img, ItemIcon, NinePatch, Chrome, Text } from './pixel/components';
-import { hex } from './pixel/widgets';
-
-const HERO_SHEETS: Record<string, string> = {
-  WARRIOR: 'warrior.png',
-  MAGE: 'mage.png',
-  ROGUE: 'rogue.png',
-  HUNTRESS: 'ranger.png',
-};
+import { HERO_SHEETS, hex } from './pixel/widgets';
 
 /** StatusPane: avatar, HP and XP bars, level, depth, iron keys, buffs, danger indicator and menu button. */
 export function StatusPane({

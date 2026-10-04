@@ -2,7 +2,22 @@
 import type { ComponentChildren } from 'preact';
 import type { ExamineView, ItemWindowView, SlotView, StatusView } from '../engine/Inspect';
 import { Chrome, Img, ItemIcon, NinePatch, Text } from './pixel/components';
-import { CharPortrait, hex, HealthBar, IconTitle, ItemIconGlow, RedButton, TITLE_COLOR, Window } from './pixel/widgets';
+import { useState } from 'preact/hooks';
+import type { RankingRecord } from '../engine/Rankings';
+import type { Prefs } from '../platform/settings';
+import {
+  CharPortrait,
+  CheckBox,
+  hex,
+  HealthBar,
+  HeroAvatar,
+  IconTitle,
+  ItemIconGlow,
+  LabeledTabs,
+  RedButton,
+  TITLE_COLOR,
+  Window,
+} from './pixel/widgets';
 
 const GAP = 2;
 
@@ -226,7 +241,7 @@ export function WndStory({ text, onClose }: { text: string; onClose: () => void 
   return (
     <Window width={108} chrome={Chrome.SCROLL} onClose={onClose}>
       <div onClick={onClose}>
-        <Text text={text} size={7} color="#000000" maxWidth={108} />
+        <Text text={text} size={7} color="invert" maxWidth={108} />
       </div>
     </Window>
   );
@@ -311,7 +326,7 @@ export function WndHero({
   const statRow = ([label, value]: [string, string]) => (
     <div key={label} class="stat-row">
       <Text text={label} size={8} />
-      <Text text={value} size={8} style={{ position: 'absolute', left: `${WIDTH * 0.65}px` }} />
+      <Text text={value} size={8} style={{ position: 'absolute', top: 0, left: `${WIDTH * 0.65}px` }} />
     </div>
   );
   return (
@@ -334,29 +349,178 @@ export function WndHero({
   );
 }
 
-/** WndGame: the in-game menu. */
-export function WndGame({ onNewGame, onClose }: { onNewGame: () => void; onClose: () => void }) {
+/** WndGame: the in-game menu (Settings; when dead, Start New Game and Rankings; Main Menu; Return to Game). */
+export function WndGame({
+  dead,
+  onSettings,
+  onNewGame,
+  onRankings,
+  onMainMenu,
+  onClose,
+}: {
+  dead: boolean;
+  onSettings: () => void;
+  onNewGame: () => void;
+  onRankings: () => void;
+  onMainMenu: () => void;
+  onClose: () => void;
+}) {
   const WIDTH = 120;
   return (
     <Window width={WIDTH} onClose={onClose}>
       <div class="menu-buttons">
-        <RedButton label="Start New Game" width={WIDTH} onClick={onNewGame} />
+        <RedButton label="Settings" width={WIDTH} onClick={onSettings} />
+        {dead && <RedButton label="Start New Game" width={WIDTH} onClick={onNewGame} />}
+        {dead && <RedButton label="Rankings" width={WIDTH} onClick={onRankings} />}
+        <RedButton label="Main Menu" width={WIDTH} onClick={onMainMenu} />
         <RedButton label="Return to Game" width={WIDTH} onClick={onClose} />
       </div>
     </Window>
   );
 }
 
-/** The game-over screen (PD shows the "You died" banner and a WndGame without "Return to Game"). */
-export function GameOver({ description, onNewGame }: { description: string; onNewGame: () => void }) {
+/** WndSettings: the options that apply to this port (zoom is pinch/scroll in 3D; brightness comes with M7). */
+export function WndSettings({
+  prefs,
+  onChange,
+  onClose,
+}: {
+  prefs: Prefs;
+  onChange: (p: Partial<Prefs>) => void;
+  onClose: () => void;
+}) {
+  const WIDTH = 112;
+  return (
+    <Window width={WIDTH} onClose={onClose}>
+      <div class="menu-buttons">
+        <CheckBox
+          label="Scale up UI"
+          width={WIDTH}
+          checked={prefs.scaleUp}
+          onChange={(v) => onChange({ scaleUp: v })}
+        />
+        <CheckBox label="Music" width={WIDTH} checked={prefs.music} onChange={(v) => onChange({ music: v })} />
+        <CheckBox label="Sound FX" width={WIDTH} checked={prefs.sound} onChange={(v) => onChange({ sound: v })} />
+      </div>
+    </Window>
+  );
+}
+
+/** The game-over screen: GameScene's "Game Over" banner, the cause of death and WndGame's choices for the dead. */
+export function GameOver({
+  description,
+  onNewGame,
+  onRankings,
+  onMainMenu,
+}: {
+  description: string;
+  onNewGame: () => void;
+  onRankings: () => void;
+  onMainMenu: () => void;
+}) {
   return (
     <div class="wnd-blocker game-over">
       <Img src="banners.png" x={0} y={105} w={128} h={35} />
       <Text text={description} size={7} color="#ffffff" maxWidth={120} style={{ marginTop: '8px' }} />
-      <div style={{ marginTop: '12px' }}>
+      <div class="menu-buttons" style={{ marginTop: '12px' }}>
         <RedButton label="Start New Game" width={120} onClick={onNewGame} />
+        <RedButton label="Rankings" width={120} onClick={onRankings} />
+        <RedButton label="Main Menu" width={120} onClick={onMainMenu} />
       </div>
     </div>
+  );
+}
+
+const WAR_PERKS = [
+  'Warriors start with 11 points of Strength.',
+  'Warriors start with a unique short sword. This sword can be later "reforged" to upgrade another melee weapon.',
+  'Warriors are less proficient with missile weapons.',
+  'Any piece of food restores some health when eaten.',
+  'Potions of Strength are identified from the beginning.',
+];
+
+/** WndClass: the class's perks as a dotted list (the Mastery tab arrives with subclasses in M3). */
+export function WndClass({ heroClass, onClose }: { heroClass: string; onClose: () => void }) {
+  const WIDTH = 110;
+  const perks = heroClass === 'WARRIOR' ? WAR_PERKS : [];
+  return (
+    <Window
+      width={WIDTH}
+      onClose={onClose}
+      below={<LabeledTabs labels={[heroClass.toLowerCase()]} selected={0} onSelect={() => {}} tabWidth={50} />}
+    >
+      <div class="perks" onClick={onClose}>
+        {perks.map((p) => (
+          <div key={p} class="perk">
+            <Text text={'\u007f'} size={6} color={TITLE_COLOR} />
+            <Text text={p} size={6} maxWidth={WIDTH - 8} />
+          </div>
+        ))}
+      </div>
+    </Window>
+  );
+}
+
+/** WndRanking: a finished run's stats and items (Badges tab with M6). */
+export function WndRanking({ record, onClose }: { record: RankingRecord; onClose: () => void }) {
+  const WIDTH = 112;
+  const [tab, setTab] = useState(0);
+  const d = record.details;
+  if (!d) return <WndMessage text="Unable to load additional information" onClose={onClose} />;
+  const row = (label: string, value: number) => (
+    <div key={label} class="stat-row rank-stat">
+      <Text text={label} size={7} />
+      <Text
+        text={String(value)}
+        size={7}
+        style={{ position: 'absolute', top: 0, left: `${Math.trunc(WIDTH * 0.65)}px` }}
+      />
+    </div>
+  );
+  const gap = <div style={{ height: '4px' }} />;
+  return (
+    <Window
+      width={WIDTH}
+      onClose={onClose}
+      below={<LabeledTabs labels={['Stats', 'Items']} selected={tab} onSelect={setTab} tabWidth={40} />}
+    >
+      <div class="ranking-page" style={{ height: '134px' }}>
+        {tab === 0 ? (
+          <div>
+            <IconTitle
+              width={WIDTH}
+              icon={<HeroAvatar heroClass={record.heroClass} tier={record.armorTier} />}
+              label={d.title}
+            />
+            {gap}
+            {gap}
+            {row('Strength', d.str)}
+            {row('Health', d.ht)}
+            {gap}
+            {row('Game Duration', d.duration)}
+            {gap}
+            {row('Maximum Depth', d.depth)}
+            {row('Mobs Killed', d.enemies)}
+            {row('Gold Collected', d.gold)}
+            {gap}
+            {row('Food Eaten', d.food)}
+            {row('Potions Cooked', d.alchemy)}
+            {row('Ankhs Used', d.ankhs)}
+          </div>
+        ) : (
+          <div class="ranking-items">
+            {d.items.map((it, i) => (
+              <div key={i} class="ranking-item">
+                <div class="item-slot small" style={{ background: '#4a4d44' }}>
+                  <ItemIconGlow image={it.image} glow={it.glow} />
+                </div>
+                <Text text={it.quickslot ? `${it.name} (quickslot)` : it.name} size={7} maxWidth={WIDTH - 30} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Window>
   );
 }
 

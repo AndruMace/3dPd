@@ -33,3 +33,4 @@ import './actors/hero/Hero';
 import './levels/Room';
 import './levels/SewerLevel';
 import './levels/SewerBossLevel';
+import './Rankings';

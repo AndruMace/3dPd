@@ -145,3 +145,90 @@ export function useUiWidth(): number {
   const zoom = useZoom();
   return (window.innerWidth * (window.devicePixelRatio || 1)) / zoom;
 }
+
+export const HERO_SHEETS: Record<string, string> = {
+  WARRIOR: 'warrior.png',
+  MAGE: 'mage.png',
+  ROGUE: 'rogue.png',
+  HUNTRESS: 'ranger.png',
+};
+
+/** HeroSprite.avatar: the first idle frame of the class sheet, in the armour tier's row. */
+export function HeroAvatar({
+  heroClass,
+  tier,
+  style,
+}: {
+  heroClass: string;
+  tier: number;
+  style?: Record<string, string | number | undefined>;
+}) {
+  return <Img src={HERO_SHEETS[heroClass] ?? 'warrior.png'} x={1} y={tier * 15} w={11} h={15} style={style} />;
+}
+
+/** ui/CheckBox: a RedButton with the label on the left and a check icon on the right. */
+export function CheckBox({
+  label,
+  checked,
+  onChange,
+  width,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  width: number;
+}) {
+  return (
+    <NinePatch
+      {...Chrome.BUTTON}
+      margin={Chrome.BUTTON.margin}
+      width={width}
+      height={20}
+      class="red-button checkbox"
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange(!checked);
+      }}
+    >
+      <div class="checkbox-inner">
+        <Text text={label} size={9} />
+        <Img src="icons.png" x={checked ? 54 : 66} y={12} w={12} h={12} />
+      </div>
+    </NinePatch>
+  );
+}
+
+/** WndTabbed's LabeledTab row: text tabs hanging under a window. */
+export function LabeledTabs({
+  labels,
+  selected,
+  onSelect,
+  tabWidth,
+}: {
+  labels: string[];
+  selected: number;
+  onSelect: (i: number) => void;
+  tabWidth: number;
+}) {
+  return (
+    <div class="tabs">
+      {labels.map((label, i) => (
+        <NinePatch
+          key={label}
+          src="chrome.png"
+          x={i === selected ? 64 : 74}
+          y={22}
+          w={10}
+          h={14}
+          margin={[4, 7, 4, 6]}
+          width={tabWidth}
+          height={20}
+          class="tab labeled-tab"
+          onClick={() => onSelect(i)}
+        >
+          <Text text={label} size={9} color={i === selected ? '#ffffff' : '#999999'} />
+        </NinePatch>
+      ))}
+    </div>
+  );
+}

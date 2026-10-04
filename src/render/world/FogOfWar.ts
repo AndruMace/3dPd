@@ -80,7 +80,9 @@ export function applyWorldShader(material: THREE.Material, uniforms: WorldUnifor
           float lateral = abs(d.x * uViewDir.y - d.y * uViewDir.x);
           // Walls between the camera and the hero shrink to a stub.
           float cut = (1.0 - smoothstep(-0.2, 0.6, along)) * smoothstep(-3.6, -2.6, along) * (1.0 - smoothstep(1.6, 2.4, lateral));
-          if (transformed.y > uCutHeight) transformed.y = mix(transformed.y, uCutHeight, cut);
+          // Door panels (aCut 2) only come down to half height so they stay recognisable.
+          float cutH = aCut > 1.5 ? 0.5 : uCutHeight;
+          if (transformed.y > cutH) transformed.y = mix(transformed.y, cutH, cut);
         }`
             : ''
         }`,

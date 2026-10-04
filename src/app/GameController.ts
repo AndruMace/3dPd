@@ -7,12 +7,14 @@ import { Assets } from '../content/generated/Assets';
 import { Audio } from '../audio/Audio';
 import { Dungeon } from '../engine/Dungeon';
 import { Game, type SavedGame } from '../engine/Game';
+import type { HeroClass } from '../engine/actors/hero/Hero';
 import { Inspect, type ExamineView, type StatusView } from '../engine/Inspect';
 import type { GameEvent } from '../engine/core/events';
 import type { Prompt } from '../engine/core/ui';
 import { HEIGHT, WIDTH } from '../engine/levels/constants';
 import { onAppPause } from '../platform/lifecycle';
 import { Storage } from '../platform/storage';
+import { submitRanking } from './rankings';
 import { CameraRig } from '../render/camera/CameraRig';
 import { CharView, cellToWorld, MOVE_INTERVAL } from '../render/actors/CharView';
 import { HeapView } from '../render/actors/HeapView';
@@ -149,11 +151,23 @@ export class GameController {
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
+  /** The game scene is showing (the title and other menus pause rendering and hide the 3D view). */
+  setActive(active: boolean): void {
+    this.container.style.visibility = active ? '' : 'hidden';
+    this.renderer.setAnimationLoop(active ? () => this.frame() : null);
+  }
+
+  /** Leaving for the main menu: save the run (PD saves when GameScene is left). */
+  async leave(): Promise<void> {
+    await this.save();
+    this.setActive(false);
+  }
+
   // ---- Runs ----
 
-  start(seed: number | string): void {
+  start(seed: number | string, heroClass: HeroClass = 'WARRIOR'): void {
     this.reset();
-    Game.newGame({ seed, heroClass: 'WARRIOR' });
+    Game.newGame({ seed, heroClass });
     this.enqueue();
     Audio.music(Assets.TUNE);
   }
@@ -208,6 +222,7 @@ export class GameController {
   // ---- Commands from the UI ----
 
   private canCommand(): boolean {
+    if (!Dungeon.hero) return false;
     return this.idle() && Game.isReady() && !this.state.interlevel && !this.state.dead;
   }
 
@@ -561,6 +576,9 @@ export class GameController {
         return 0;
       case 'fx':
         return this.showFx(e);
+      case 'ranking':
+        void submitRanking(e.record);
+        return 0;
       case 'heroDied':
         void Storage.remove(SAVE_KEY);
         Audio.play(Assets.SND_DEATH);

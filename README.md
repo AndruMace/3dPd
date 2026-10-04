@@ -10,7 +10,7 @@ Capacitor and to the web. GPL-3.0. See [PLAN.md](PLAN.md) for the design and mil
 npm install
 npm run refs     # clone the original PD sources (pinned) into reference/
 npm run assets   # import art/audio into public/assets/, generate src/content/generated/
-npm run dev      # http://localhost:5173 (?seed=<anything> for a fixed dungeon); voxel gallery at /gallery.html
+npm run dev      # http://localhost:5173 (?seed=<anything> skips the menus into a fixed dungeon); voxel gallery at /gallery.html
 ```
 
 | Command                              | What it does                                 |
@@ -41,7 +41,8 @@ Keys: arrows/WASD/vi-keys/numpad to step (relative to the camera), space or `.` 
   `world/` (terrain from the region tile sheets, water, fog of war, wall cut-away), `camera/`
 - `src/app/GameController.ts` input → engine → event playback with PD's animation timings
 - `src/ui/` the pixel UI rebuilt from PD's atlases and bitmap fonts at PD's integer zoom: `pixel/` (fonts, nine-patches,
-  widgets), `hudParts.tsx` (status pane, toolbar, log), `windows.tsx` (WndBag, WndItem, ...), `GameUI.tsx` (root)
+  widgets), `hudParts.tsx` (status pane, toolbar, log), `windows.tsx` (WndBag, WndItem, WndRanking, ...),
+  `scenes.tsx` (Title, Start, Rankings, About), `GameUI.tsx` (in-game layer), `App.tsx` (scene switching)
 - `src/render/fx/` particles (PD emitters), blob clouds, magic bolts, thrown items, flares, shake
 - `src/audio/` original music and sound effects (Web Audio, panned by screen position)
 - `src/platform/` IndexedDB saves and app lifecycle (save on pause)

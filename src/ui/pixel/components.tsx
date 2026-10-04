@@ -3,6 +3,7 @@
 import type { ComponentChildren } from 'preact';
 import { createContext } from 'preact';
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { Settings } from '../../platform/settings';
 import { chooseFont, drawText, layoutText } from './font';
 
 const ASSETS = `${import.meta.env.BASE_URL}assets/img/`;
@@ -10,16 +11,19 @@ const ASSETS = `${import.meta.env.BASE_URL}assets/img/`;
 export const ZoomContext = createContext(3);
 export const useZoom = () => useContext(ZoomContext);
 
-/** PixelScene: the largest integer zoom that keeps at least 128x224 (portrait) or 224x160 (landscape) UI pixels. */
-export function computeZoom(width: number, height: number, dpr: number): number {
+/**
+ * PixelScene's defaultZoom: start from 2.5x the density, shrink until at least 128x224 (portrait) or 224x160
+ * (landscape) UI pixels fit, then with "Scale up UI" (PD's default) grow while they still fit.
+ */
+export function computeZoom(width: number, height: number, dpr: number, scaleUp = Settings.get().scaleUp): number {
   const landscape = width > height;
   const minW = landscape ? 224 : 128;
   const minH = landscape ? 160 : 224;
+  const w = width * dpr;
+  const h = height * dpr;
   let zoom = Math.ceil(dpr * 2.5);
-  while ((width * dpr) / zoom < minW || (height * dpr) / zoom < minH) {
-    if (zoom <= 1) break;
-    zoom--;
-  }
+  while ((w / zoom < minW || h / zoom < minH) && zoom > 1) zoom--;
+  if (scaleUp) while (w / (zoom + 1) >= minW && h / (zoom + 1) >= minH) zoom++;
   return zoom;
 }
 
@@ -216,6 +220,20 @@ export const Chrome = {
   TAG: { src: 'chrome.png', x: 22, y: 18, w: 16, h: 14, margin: [3, 3, 3, 3] as [number, number, number, number] },
   SCROLL: { src: 'chrome.png', x: 32, y: 32, w: 32, h: 32, margin: [5, 11, 5, 11] as [number, number, number, number] },
 };
+
+/** Loads whole images into the browser cache so atlas frames (CSS backgrounds) don't pop in. */
+export function preloadImages(files: string[]): Promise<void> {
+  return Promise.all(
+    files.map(
+      (f) =>
+        new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = img.onerror = () => resolve();
+          img.src = ASSETS + f;
+        }),
+    ),
+  ).then(() => undefined);
+}
 
 export function preloadChrome(): Promise<void> {
   return preloadNinePatches([

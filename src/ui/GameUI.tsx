@@ -9,36 +9,65 @@ import { Inspect, type ExamineView } from '../engine/Inspect';
 import type { ItemSelectorMode, Prompt } from '../engine/core/ui';
 import type { Bag } from '../engine/items/bags';
 import { appendLog, GameLog, StatusPane, Toolbar, type LogEntry } from './hudParts';
-import { Chrome, computeZoom, Img, ItemIcon, measureText, NinePatch, PixelRoot, Text } from './pixel/components';
+import type { Prefs } from '../platform/settings';
+import { Chrome, Img, ItemIcon, measureText, NinePatch, Text } from './pixel/components';
 import { CharPortrait, hex } from './pixel/widgets';
-import { GameOver, WndBag, WndGame, WndHero, WndInfo, WndItem, WndMessage, WndOptions, WndStory } from './windows';
+import {
+  GameOver,
+  WndBag,
+  WndGame,
+  WndHero,
+  WndInfo,
+  WndItem,
+  WndMessage,
+  WndOptions,
+  WndSettings,
+  WndStory,
+} from './windows';
 
 type Wnd =
   | { kind: 'bag'; bag: number | null; mode: ItemSelectorMode; purpose: 'inventory' | 'quickslot' }
   | { kind: 'item'; uid: number }
   | { kind: 'info'; view: ExamineView }
   | { kind: 'hero' }
-  | { kind: 'menu' };
+  | { kind: 'menu' }
+  | { kind: 'settings' };
+
+/** Ways out of the game scene, provided by the App. */
+export interface GameNav {
+  newGame: () => void;
+  rankings: () => void;
+  mainMenu: () => void;
+}
 
 const TOOLBAR_HEIGHT = 25;
 
-function safeArea(): { width: number; height: number; left: number; top: number } {
-  const probe = document.getElementById('safe-area');
-  if (!probe) return { width: innerWidth, height: innerHeight, left: 0, top: 0 };
-  const r = probe.getBoundingClientRect();
-  return { width: r.width, height: r.height, left: r.left, top: r.top };
-}
-
-export function GameUI({ game, onNewGame }: { game: GameController; onNewGame: () => void }) {
+export function GameUI({
+  game,
+  zoom,
+  uiW,
+  uiH,
+  nav,
+  prefs,
+  onPrefs,
+}: {
+  game: GameController;
+  zoom: number;
+  uiW: number;
+  uiH: number;
+  nav: GameNav;
+  prefs: Prefs;
+  onPrefs: (p: Partial<Prefs>) => void;
+}) {
   const [state, setState] = useState<ViewState>(game.state);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [wnds, setWnds] = useState<Wnd[]>([]);
-  const [area, setArea] = useState(safeArea);
-  const dpr = window.devicePixelRatio || 1;
-  const zoom = computeZoom(area.width, area.height, dpr);
-  const uiW = Math.floor((area.width * dpr) / zoom);
-  const uiH = Math.floor((area.height * dpr) / zoom);
   const landscape = uiW > uiH;
+  const newGame = () => {
+    setWnds([]);
+    setLog([]);
+    nav.newGame();
+  };
 
   const wndsRef = useRef(wnds);
   wndsRef.current = wnds;
@@ -62,8 +91,6 @@ export function GameUI({ game, onNewGame }: { game: GameController; onNewGame: (
     game.onExamine = (view) => push(view.kind === 'hero' ? { kind: 'hero' } : { kind: 'info', view });
     game.inputBlocked = () => wndsRef.current.length > 0 || modalPrompt(stateRef.current);
     setState(game.state);
-    const onResize = () => setArea(safeArea());
-    addEventListener('resize', onResize);
     const onKey = (ev: KeyboardEvent) => {
       if (ev.metaKey || ev.ctrlKey) return;
       if (ev.key === 'Escape') {
@@ -78,8 +105,8 @@ export function GameUI({ game, onNewGame }: { game: GameController; onNewGame: (
     };
     addEventListener('keydown', onKey);
     return () => {
-      removeEventListener('resize', onResize);
       removeEventListener('keydown', onKey);
+      game.inputBlocked = () => true;
     };
   }, [game]);
 
@@ -155,73 +182,65 @@ export function GameUI({ game, onNewGame }: { game: GameController; onNewGame: (
         return (
           <WndGame
             key={key}
+            dead={state.dead !== null}
             onClose={pop}
-            onNewGame={() => {
-              closeAll();
-              setLog([]);
-              onNewGame();
-            }}
+            onSettings={() => push({ kind: 'settings' })}
+            onNewGame={newGame}
+            onRankings={nav.rankings}
+            onMainMenu={nav.mainMenu}
           />
         );
+      case 'settings':
+        return <WndSettings key={key} prefs={prefs} onChange={onPrefs} onClose={pop} />;
     }
   });
 
   const promptView = state.prompt ? renderPrompt(state.prompt, game, cols) : null;
 
   return (
-    <div class="safe-root" style={{ left: `${area.left}px`, top: `${area.top}px` }}>
-      <PixelRoot zoom={zoom} width={area.width} height={area.height}>
-        {status && (
-          <StatusPane
-            status={status}
-            hp={status.hp}
-            width={uiW}
-            onHero={() => push({ kind: 'hero' })}
-            onMenu={() => push({ kind: 'menu' })}
-            onDanger={() => {}}
-          />
-        )}
-        <GameLog key={String(runKey === false ? 'dead' : 'run')} entries={log} width={uiW} bottom={TOOLBAR_HEIGHT} />
-        <Toolbar
+    <>
+      {status && (
+        <StatusPane
+          status={status}
+          hp={status.hp}
           width={uiW}
-          enabled={state.ready || state.examining}
-          quickslot={state.quickslot}
-          infoActive={state.examining}
-          onWait={() => game.rest(false)}
-          onRest={() => game.rest(true)}
-          onSearch={() => game.search()}
-          onInfo={() => game.examine()}
-          onInventory={() => state.ready && push({ kind: 'bag', bag: null, mode: 'ALL', purpose: 'inventory' })}
-          onQuickslot={() => game.quickslot()}
-          onQuickslotLong={() =>
-            state.ready && push({ kind: 'bag', bag: null, mode: 'QUICKSLOT', purpose: 'quickslot' })
-          }
+          onHero={() => push({ kind: 'hero' })}
+          onMenu={() => push({ kind: 'menu' })}
+          onDanger={() => {}}
         />
-        {state.examining && <Toast text="Select a cell to examine" bottom={60} onClose={() => game.examine()} />}
-        {windows}
-        {promptView}
-        {state.resurrect && (
-          <WndOptions
-            title="Ankh"
-            portrait={<ItemIcon image={ItemSpriteSheet.ANKH} />}
-            message="You died, but you were given another chance to win this dungeon. Will you take it?"
-            options={['Yes, I will fight!', 'No, I give up']}
-            onSelect={(i) => game.resurrect(i === 0)}
-          />
-        )}
-        {state.dead !== null && !state.resurrect && (
-          <GameOver
-            description={state.dead}
-            onNewGame={() => {
-              setLog([]);
-              onNewGame();
-            }}
-          />
-        )}
-        {state.interlevel && <Interlevel text={state.interlevel} />}
-        {state.flash && <Flash key={state.flash[1]} color={state.flash[0]} />}
-      </PixelRoot>
-    </div>
+      )}
+      <GameLog key={String(runKey === false ? 'dead' : 'run')} entries={log} width={uiW} bottom={TOOLBAR_HEIGHT} />
+      <Toolbar
+        width={uiW}
+        enabled={state.ready || state.examining}
+        quickslot={state.quickslot}
+        infoActive={state.examining}
+        onWait={() => game.rest(false)}
+        onRest={() => game.rest(true)}
+        onSearch={() => game.search()}
+        onInfo={() => game.examine()}
+        onInventory={() => state.ready && push({ kind: 'bag', bag: null, mode: 'ALL', purpose: 'inventory' })}
+        onQuickslot={() => game.quickslot()}
+        onQuickslotLong={() => state.ready && push({ kind: 'bag', bag: null, mode: 'QUICKSLOT', purpose: 'quickslot' })}
+      />
+      {state.examining && <Toast text="Select a cell to examine" bottom={60} onClose={() => game.examine()} />}
+      {windows}
+      {promptView}
+      {state.resurrect && (
+        <WndOptions
+          title="Ankh"
+          portrait={<ItemIcon image={ItemSpriteSheet.ANKH} />}
+          message="You died, but you were given another chance to win this dungeon. Will you take it?"
+          options={['Yes, I will fight!', 'No, I give up']}
+          onSelect={(i) => game.resurrect(i === 0)}
+        />
+      )}
+      {state.dead !== null && !state.resurrect && (
+        <GameOver description={state.dead} onNewGame={newGame} onRankings={nav.rankings} onMainMenu={nav.mainMenu} />
+      )}
+      {state.interlevel && <Interlevel text={state.interlevel} />}
+      {state.flash && <Flash key={state.flash[1]} color={state.flash[0]} />}
+    </>
   );
 }
 

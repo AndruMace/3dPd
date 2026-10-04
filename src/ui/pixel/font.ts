@@ -232,7 +232,10 @@ export function layoutText(text: string, font: BitmapFont, maxWidth = Infinity, 
 
 const tintCache = new Map<string, HTMLCanvasElement>();
 
-/** The font image recoloured (PD's hardlight: solid colour, glyph alpha). */
+/**
+ * The font image recoloured as Noosa's hardlight does it: a colour *multiplier*. The glyphs are white with a 1px
+ * dark outline; multiplying keeps the outline dark, which is what separates letters at PD's -1 tracking.
+ */
 function tinted(font: BitmapFont, color: string): HTMLCanvasElement {
   const key = `${font.image.src}|${color}`;
   let c = tintCache.get(key);
@@ -242,9 +245,13 @@ function tinted(font: BitmapFont, color: string): HTMLCanvasElement {
     c.height = font.image.height;
     const ctx = c.getContext('2d')!;
     ctx.drawImage(font.image, 0, 0);
-    ctx.globalCompositeOperation = 'source-in';
-    ctx.fillStyle = color;
+    // 'invert' is Noosa's invert(): black glyphs with a light outline (WndStory's text on the scroll).
+    ctx.globalCompositeOperation = color === 'invert' ? 'difference' : 'multiply';
+    ctx.fillStyle = color === 'invert' ? '#ffffff' : color;
     ctx.fillRect(0, 0, c.width, c.height);
+    // multiply also paints the transparent background: restore the glyph alpha.
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(font.image, 0, 0);
     tintCache.set(key, c);
   }
   return c;

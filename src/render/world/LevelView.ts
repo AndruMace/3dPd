@@ -20,8 +20,6 @@ const BLOCK_FACE: Partial<Record<number, number>> = {
   [T.WALL]: T.WALL,
   [T.WALL_DECO]: T.WALL,
   [T.SECRET_DOOR]: T.WALL,
-  [T.DOOR]: T.DOOR,
-  [T.LOCKED_DOOR]: T.LOCKED_DOOR,
   [T.BOOKSHELF]: T.BOOKSHELF,
   [T.BARRICADE]: T.BARRICADE,
 };
@@ -47,6 +45,14 @@ const FLOOR_TILE: Partial<Record<number, number>> = {
 const isWater = (t: number) => t >= T.WATER_TILES;
 const isPit = (t: number) => (flags[t] & T.PIT) !== 0;
 const isBlock = (t: number) => BLOCK_FACE[t] !== undefined;
+const isDoor = (t: number) => t === T.DOOR || t === T.LOCKED_DOOR || t === T.OPEN_DOOR;
+
+/** Width of the brick frame at each side of PD's door tiles (2 of 16 pixels): the jambs. */
+const JAMB = 2 / 16;
+/** Half thickness of a closed door panel. */
+const PANEL = 0.14;
+/** aCut value for door panels: the cut-away lowers them only to half height, so doors stay readable. */
+const CUT_DOOR = 2;
 
 export class LevelView extends THREE.Group {
   private terrain: THREE.Mesh | null = null;
@@ -147,13 +153,22 @@ export class LevelView extends THREE.Group {
           const neighbours = [at(x, y - 1), at(x + 1, y), at(x, y + 1), at(x - 1, y)];
           for (let side = 0; side < 4; side++) {
             const n = neighbours[side];
-            if (isBlock(n) && !(t === T.DOOR || t === T.LOCKED_DOOR || n === T.DOOR || n === T.LOCKED_DOOR)) continue;
+            if (isBlock(n)) continue;
             // In PD, decorated walls (sewer pipes) show their decoration on the face you see, i.e. the south face.
             const tile = t === T.WALL_DECO && side === 2 ? T.WALL_DECO : face;
             const bottom = isPit(n) ? PIT_DEPTH : isWater(n) ? WATER_LEVEL : 0;
             solid.side(x, y, side, 0, WALL_HEIGHT, a.uv(tile), side === 2 ? 1 : side === 0 ? 0.7 : 0.85, 1);
             if (bottom < 0) solid.side(x, y, side, bottom, 0, a.uv(T.WALL), 0.5, 1);
           }
+          continue;
+        }
+
+        if (isDoor(t)) {
+          solid.floor(x, y, 0, a.uv(T.EMPTY));
+          // The wall runs east-west through this door unless walls are above and below it.
+          const alongX =
+            !(isBlock(at(x, y - 1)) && isBlock(at(x, y + 1))) || (isBlock(at(x - 1, y)) && isBlock(at(x + 1, y)));
+          this.buildDoor(solid, x, y, t, alongX);
           continue;
         }
 
@@ -237,6 +252,53 @@ export class LevelView extends THREE.Group {
     this.grass = new THREE.Mesh(grass.build(), this.grassMat);
     this.add(this.grass);
     this.waterPlane.visible = anyWater;
+  }
+
+  /**
+   * A door in 3D: brick jambs (the frame of PD's door tile) at both ends, and a thick wooden panel between them
+   * (closed or locked), or the panel swung open against one jamb. Box extents are given along the wall (u) and
+   * across it (w), then mapped to the cell's x/z.
+   */
+  private buildDoor(g: GeometryBuilder, x: number, y: number, t: number, alongX: boolean): void {
+    const a = this.atlas;
+    const wall = a.uv(T.WALL);
+    const door = a.uv(t === T.OPEN_DOOR ? T.DOOR : t);
+    // faces given as [w-, u+, w+, u-, top] relative to the wall direction.
+    const put = (
+      u0: number,
+      u1: number,
+      w0: number,
+      w1: number,
+      h1: number,
+      side: typeof wall,
+      top: typeof wall,
+      topShade: number,
+      cut: number,
+      f: [boolean, boolean, boolean, boolean, boolean],
+    ) => {
+      if (alongX) g.box(x, y, [u0, w0, u1, w1], 0, h1, side, top, topShade, cut, f);
+      // Rotated: u runs along z, w along x. N/S faces become the u ends, E/W the panel faces.
+      else g.box(x, y, [w0, u0, w1, u1], 0, h1, side, top, topShade, cut, [f[3], f[2], f[1], f[0], f[4]]);
+    };
+    put(0, JAMB, 0, 1, WALL_HEIGHT, wall, wall, WALL_TOP_SHADE, 1, [true, true, true, false, true]);
+    put(1 - JAMB, 1, 0, 1, WALL_HEIGHT, wall, wall, WALL_TOP_SHADE, 1, [true, false, true, true, true]);
+    if (t === T.OPEN_DOOR) {
+      put(JAMB, JAMB + 0.1, 0.5 - PANEL, 1, WALL_HEIGHT * 0.95, door, door, 0.8, CUT_DOOR, [
+        true,
+        true,
+        true,
+        false,
+        true,
+      ]);
+    } else {
+      put(JAMB, 1 - JAMB, 0.5 - PANEL, 0.5 + PANEL, WALL_HEIGHT, door, door, 0.8, CUT_DOOR, [
+        true,
+        false,
+        true,
+        false,
+        true,
+      ]);
+    }
   }
 
   /** Terrain changed at runtime (doors, discovered secrets, burnt grass): rebuild. Cheap at 32x32. */

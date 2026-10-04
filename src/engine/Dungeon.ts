@@ -2,6 +2,7 @@
 // statics were) so ported code can say `Dungeon.hero` / `Dungeon.level`. Only type imports and core utilities
 // here, so any module can import it without creating class-initialization cycles.
 import type { Hero } from './actors/hero/Hero';
+import { classNameOf } from './core/Bundle';
 import { Random } from './core/Random';
 import type { Item } from './items/Item';
 import type { Level } from './levels/Level';
@@ -82,6 +83,7 @@ interface DungeonState {
   souNeeded(): boolean;
   soeNeeded(): boolean;
   dropToChasm(item: Item): void;
+  submitRanking(win: boolean): void;
   fail(desc: string): void;
   win(desc: string): void;
 }
@@ -145,13 +147,19 @@ export const Dungeon: DungeonState = {
     dropped.push(item);
   },
 
+  /** Rankings.submit, installed by Rankings.ts (kept as a hook so this module stays dependency-free). */
+  submitRanking: (_win: boolean): void => {},
+
   fail(desc: string): void {
     Dungeon.resultDescription = desc;
-    // Rankings.submit(false) happens in the run-end flow when no Ankh saves the hero.
+    let ankh = false;
+    for (const item of Dungeon.hero.belongings.all()) if (classNameOf(item) === 'Ankh') ankh = true;
+    if (!ankh) Dungeon.submitRanking(false);
   },
 
   win(desc: string): void {
     Dungeon.hero.belongings.identify();
     Dungeon.resultDescription = desc;
+    Dungeon.submitRanking(true);
   },
 };
