@@ -6,8 +6,6 @@ import { frameRect, loadSheet } from '../voxel/sheets';
 import type { PixelSource } from '../voxel/voxelize';
 import { MovieClip } from './MovieClip';
 
-const sharedMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
-
 export class VoxelSprite extends THREE.Group {
   readonly def: SpriteDef;
   readonly clip: MovieClip;
@@ -19,6 +17,8 @@ export class VoxelSprite extends THREE.Group {
   flipped = false;
 
   private readonly mesh: THREE.Mesh;
+  /** Per-sprite material so flashes and fades don't affect other characters. */
+  readonly material = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xffffff, emissiveIntensity: 0 });
   private sheet: PixelSource | null = null;
   private pendingFrame = 0;
 
@@ -37,8 +37,7 @@ export class VoxelSprite extends THREE.Group {
   ) {
     super();
     this.def = def;
-    this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), sharedMaterial);
-    this.mesh.castShadow = true;
+    this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
     this.add(this.mesh);
     this.clip = new MovieClip((f) => this.showFrame(f));
     this.name = spriteId;

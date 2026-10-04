@@ -10,7 +10,7 @@ Capacitor and to the web. GPL-3.0. See [PLAN.md](PLAN.md) for the design and mil
 npm install
 npm run refs     # clone the original PD sources (pinned) into reference/
 npm run assets   # import art/audio into public/assets/, generate src/content/generated/
-npm run dev      # http://localhost:5173 ; voxel gallery at /gallery.html
+npm run dev      # http://localhost:5173 (?seed=<anything> for a fixed dungeon); voxel gallery at /gallery.html
 ```
 
 | Command                              | What it does                                 |
@@ -21,8 +21,12 @@ npm run dev      # http://localhost:5173 ; voxel gallery at /gallery.html
 
 ## Layout
 
-- `src/engine/` pure, deterministic game logic ported from the Java sources (no three/DOM imports; ESLint-enforced)
+- `src/engine/` pure, deterministic game logic ported from the Java sources (no three/DOM imports; ESLint-enforced).
+  It runs synchronously and emits events (`core/events.ts`); `Game.ts` is its API.
 - `src/content/` data tables; `generated/` is derived from `reference/` by `npm run assets`
-- `src/render/` Three.js: `voxel/` (sprite → voxel mesh), `actors/` (flipbook characters, Noosa MovieClip timing)
+- `src/render/` Three.js: `voxel/` (sprite → voxel mesh), `actors/` (flipbook characters, Noosa MovieClip timing),
+  `world/` (terrain from the region tile sheets, water, fog of war, wall cut-away), `camera/`
+- `src/app/GameController.ts` input → engine → event playback with PD's animation timings
+- `src/ui/` HUD (placeholder until the pixel UI in M2) and floating combat text
 - `src/gallery/` dev page showing every sprite and item voxelized and animated
 - `tools/` reference fetcher, asset importer, sprite-definition extractor (parses `*Sprite.java`)

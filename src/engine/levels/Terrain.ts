@@ -1,0 +1,139 @@
+// Port of levels/Terrain.java. Terrain values double as indices into the region tile sheets (tilesN.png).
+
+export const Terrain = {
+  CHASM: 0,
+  EMPTY: 1,
+  GRASS: 2,
+  EMPTY_WELL: 3,
+  WALL: 4,
+  DOOR: 5,
+  OPEN_DOOR: 6,
+  ENTRANCE: 7,
+  EXIT: 8,
+  EMBERS: 9,
+  LOCKED_DOOR: 10,
+  PEDESTAL: 11,
+  WALL_DECO: 12,
+  BARRICADE: 13,
+  EMPTY_SP: 14,
+  HIGH_GRASS: 15,
+  EMPTY_DECO: 24,
+  LOCKED_EXIT: 25,
+  UNLOCKED_EXIT: 26,
+  SIGN: 29,
+  WELL: 34,
+  STATUE: 35,
+  STATUE_SP: 36,
+  BOOKSHELF: 41,
+  ALCHEMY: 42,
+  CHASM_FLOOR: 43,
+  CHASM_FLOOR_SP: 44,
+  CHASM_WALL: 45,
+  CHASM_WATER: 46,
+
+  SECRET_DOOR: 16,
+  TOXIC_TRAP: 17,
+  SECRET_TOXIC_TRAP: 18,
+  FIRE_TRAP: 19,
+  SECRET_FIRE_TRAP: 20,
+  PARALYTIC_TRAP: 21,
+  SECRET_PARALYTIC_TRAP: 22,
+  INACTIVE_TRAP: 23,
+  POISON_TRAP: 27,
+  SECRET_POISON_TRAP: 28,
+  ALARM_TRAP: 30,
+  SECRET_ALARM_TRAP: 31,
+  LIGHTNING_TRAP: 32,
+  SECRET_LIGHTNING_TRAP: 33,
+  GRIPPING_TRAP: 37,
+  SECRET_GRIPPING_TRAP: 38,
+  SUMMONING_TRAP: 39,
+  SECRET_SUMMONING_TRAP: 40,
+
+  WATER_TILES: 48,
+  WATER: 63,
+
+  PASSABLE: 0x01,
+  LOS_BLOCKING: 0x02,
+  FLAMABLE: 0x04,
+  SECRET: 0x08,
+  SOLID: 0x10,
+  AVOID: 0x20,
+  LIQUID: 0x40,
+  PIT: 0x80,
+  UNSTITCHABLE: 0x100,
+} as const;
+
+const T = Terrain;
+export const flags = new Int32Array(256);
+flags[T.CHASM] = T.AVOID | T.PIT | T.UNSTITCHABLE;
+flags[T.EMPTY] = T.PASSABLE;
+flags[T.GRASS] = T.PASSABLE | T.FLAMABLE;
+flags[T.EMPTY_WELL] = T.PASSABLE;
+flags[T.WATER] = T.PASSABLE | T.LIQUID | T.UNSTITCHABLE;
+flags[T.WALL] = T.LOS_BLOCKING | T.SOLID | T.UNSTITCHABLE;
+flags[T.DOOR] = T.PASSABLE | T.LOS_BLOCKING | T.FLAMABLE | T.SOLID | T.UNSTITCHABLE;
+flags[T.OPEN_DOOR] = T.PASSABLE | T.FLAMABLE | T.UNSTITCHABLE;
+flags[T.ENTRANCE] = T.PASSABLE;
+flags[T.EXIT] = T.PASSABLE;
+flags[T.EMBERS] = T.PASSABLE;
+flags[T.LOCKED_DOOR] = T.LOS_BLOCKING | T.SOLID | T.UNSTITCHABLE;
+flags[T.PEDESTAL] = T.PASSABLE | T.UNSTITCHABLE;
+flags[T.WALL_DECO] = flags[T.WALL];
+flags[T.BARRICADE] = T.FLAMABLE | T.SOLID | T.LOS_BLOCKING;
+flags[T.EMPTY_SP] = flags[T.EMPTY] | T.UNSTITCHABLE;
+flags[T.HIGH_GRASS] = T.PASSABLE | T.LOS_BLOCKING | T.FLAMABLE;
+flags[T.EMPTY_DECO] = flags[T.EMPTY];
+flags[T.LOCKED_EXIT] = T.SOLID;
+flags[T.UNLOCKED_EXIT] = T.PASSABLE;
+flags[T.SIGN] = T.PASSABLE | T.FLAMABLE;
+flags[T.WELL] = T.AVOID;
+flags[T.STATUE] = T.SOLID;
+flags[T.STATUE_SP] = flags[T.STATUE] | T.UNSTITCHABLE;
+flags[T.BOOKSHELF] = flags[T.BARRICADE] | T.UNSTITCHABLE;
+flags[T.ALCHEMY] = T.PASSABLE;
+flags[T.CHASM_WALL] = flags[T.CHASM];
+flags[T.CHASM_FLOOR] = flags[T.CHASM];
+flags[T.CHASM_FLOOR_SP] = flags[T.CHASM];
+flags[T.CHASM_WATER] = flags[T.CHASM];
+flags[T.SECRET_DOOR] = flags[T.WALL] | T.SECRET | T.UNSTITCHABLE;
+for (const [trap, secret] of [
+  [T.TOXIC_TRAP, T.SECRET_TOXIC_TRAP],
+  [T.FIRE_TRAP, T.SECRET_FIRE_TRAP],
+  [T.PARALYTIC_TRAP, T.SECRET_PARALYTIC_TRAP],
+  [T.POISON_TRAP, T.SECRET_POISON_TRAP],
+  [T.ALARM_TRAP, T.SECRET_ALARM_TRAP],
+  [T.LIGHTNING_TRAP, T.SECRET_LIGHTNING_TRAP],
+  [T.GRIPPING_TRAP, T.SECRET_GRIPPING_TRAP],
+  [T.SUMMONING_TRAP, T.SECRET_SUMMONING_TRAP],
+]) {
+  flags[trap] = T.AVOID;
+  flags[secret] = flags[T.EMPTY] | T.SECRET;
+}
+flags[T.INACTIVE_TRAP] = flags[T.EMPTY];
+for (let i = T.WATER_TILES; i < T.WATER_TILES + 16; i++) flags[i] = flags[T.WATER];
+
+export function discover(terr: number): number {
+  switch (terr) {
+    case T.SECRET_DOOR:
+      return T.DOOR;
+    case T.SECRET_FIRE_TRAP:
+      return T.FIRE_TRAP;
+    case T.SECRET_PARALYTIC_TRAP:
+      return T.PARALYTIC_TRAP;
+    case T.SECRET_TOXIC_TRAP:
+      return T.TOXIC_TRAP;
+    case T.SECRET_POISON_TRAP:
+      return T.POISON_TRAP;
+    case T.SECRET_ALARM_TRAP:
+      return T.ALARM_TRAP;
+    case T.SECRET_LIGHTNING_TRAP:
+      return T.LIGHTNING_TRAP;
+    case T.SECRET_GRIPPING_TRAP:
+      return T.GRIPPING_TRAP;
+    case T.SECRET_SUMMONING_TRAP:
+      return T.SUMMONING_TRAP;
+    default:
+      return terr;
+  }
+}

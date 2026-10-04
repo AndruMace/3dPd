@@ -6,6 +6,11 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
+  {
     // The engine must stay pure and deterministic: no rendering, UI, DOM, or wall-clock randomness.
     files: ['src/engine/**/*.ts'],
     rules: {

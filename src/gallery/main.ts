@@ -133,9 +133,10 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
-const clock = new THREE.Clock();
+const timer = new THREE.Timer();
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 0.1);
+  timer.update();
+  const dt = Math.min(timer.getDelta(), 0.1);
   controls.update();
   for (const s of sprites) s.update(dt, camera);
   renderer.render(scene, camera);

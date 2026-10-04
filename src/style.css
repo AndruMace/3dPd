@@ -1,0 +1,137 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#game {
+  position: fixed;
+  inset: 0;
+}
+#game canvas {
+  display: block;
+  touch-action: none;
+}
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+.hud {
+  position: absolute;
+  inset: 0;
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom))
+    max(8px, env(safe-area-inset-left));
+}
+.status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(220px, 60vw);
+}
+.hp-bar {
+  position: relative;
+  height: 14px;
+  background: #400;
+  border: 1px solid #000;
+  box-shadow: 0 0 0 1px #555;
+}
+.hp-fill {
+  height: 100%;
+  background: #c22;
+  transition: width 0.2s;
+}
+.hp-text {
+  position: absolute;
+  inset: 0;
+  text-align: center;
+  font-size: 11px;
+  line-height: 14px;
+  text-shadow: 0 1px 1px #000;
+}
+.badges {
+  display: flex;
+  gap: 10px;
+  text-shadow: 0 1px 2px #000;
+}
+.log {
+  position: absolute;
+  left: max(8px, env(safe-area-inset-left));
+  right: 8px;
+  bottom: calc(max(8px, env(safe-area-inset-bottom)) + 52px);
+  text-shadow: 0 1px 2px #000;
+  line-height: 1.35;
+}
+.toolbar {
+  position: absolute;
+  right: max(8px, env(safe-area-inset-right));
+  bottom: max(8px, env(safe-area-inset-bottom));
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+.toolbar button,
+.death button {
+  min-width: 44px;
+  height: 44px;
+  font: inherit;
+  font-size: 20px;
+  color: #fff;
+  background: #2a2a2acc;
+  border: 1px solid #666;
+  border-radius: 4px;
+}
+.toolbar button:disabled {
+  opacity: 0.45;
+}
+.fade {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.fade.on {
+  opacity: 1;
+}
+.death {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  text-align: center;
+  background: #000a;
+  font-size: 16px;
+  pointer-events: auto;
+}
+.death button {
+  font-size: 14px;
+  padding: 0 16px;
+}
+.floating-text-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.floating-text {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-weight: bold;
+  font-size: 14px;
+  text-shadow:
+    0 1px 0 #000,
+    1px 0 0 #000,
+    -1px 0 0 #000,
+    0 -1px 0 #000;
+  white-space: nowrap;
+}
