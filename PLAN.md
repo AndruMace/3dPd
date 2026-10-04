@@ -103,6 +103,11 @@ tools/               import-assets, voxel gallery, headless sim bot
 - **UI and audio:** the core HUD, toolbar, quickslot, bag and item windows, plus audio.
 - **Shipping:** save and resume, with Capacitor builds for iOS and Android.
 
+_Status (2026-10-04):_ engine, pixel UI, VFX, audio, IndexedDB save/resume and the Capacitor projects are in; the iOS
+simulator build succeeds. Still open for M2: the rankings entry (and a title scene to reach it), Android build
+verification (needs JDK 21), on-device profiling and quality tiers, voxel props for doors, and the deferred items
+noted in the code (Bones and Badges move to M6; shop/blacksmith painters arrive with their depths).
+
 **M3 – Prison:** Thief, Skeleton, Swarm, Shaman and Tengu, plus Mage and Rogue, the Wandmaker quest, the Tome of Mastery and subclasses, and more blobs and VFX.
 
 **M4 – Caves:** Bat, Brute, Spinner, Cave Shaman variants and DM-300, plus the Huntress, the Blacksmith quest and the Caves region kit.

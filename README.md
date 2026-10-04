@@ -18,6 +18,19 @@ npm run dev      # http://localhost:5173 (?seed=<anything> for a fixed dungeon);
 | `npm test`                           | Vitest unit tests                            |
 | `npm run lint` / `npm run typecheck` | ESLint (enforces engine purity) / TypeScript |
 | `npm run build`                      | Production web build into `dist/`            |
+| `npm run sim`                        | Headless bot runs (crash/invariant fuzzing)  |
+| `npm run ios` / `npm run android`    | Build, sync to Capacitor, open Xcode/Studio  |
+
+### Native builds (Capacitor 7)
+
+- **iOS:** Xcode 16+. `npm run cap:sync`, then build the `App` scheme (Swift Package Manager, no CocoaPods), e.g.
+  `xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator build`.
+- **Android:** Android SDK 35+ and **JDK 21** (Capacitor 7 compiles with `--release 21`; JDK 17 fails with
+  "invalid source release: 21"). With JDK 21 on `JAVA_HOME`: `cd android && ./gradlew assembleDebug`.
+
+Controls: tap/click to move, attack, pick up or open; drag to rotate the camera, pinch/wheel to zoom.
+Keys: arrows/WASD/vi-keys/numpad to step (relative to the camera), space or `.` to wait (shift: rest), `f` search,
+`x` examine, `i` inventory, `z` quickslot, `q`/`e` rotate, Esc for windows and the menu.
 
 ## Layout
 
@@ -27,6 +40,10 @@ npm run dev      # http://localhost:5173 (?seed=<anything> for a fixed dungeon);
 - `src/render/` Three.js: `voxel/` (sprite → voxel mesh), `actors/` (flipbook characters, Noosa MovieClip timing),
   `world/` (terrain from the region tile sheets, water, fog of war, wall cut-away), `camera/`
 - `src/app/GameController.ts` input → engine → event playback with PD's animation timings
-- `src/ui/` HUD (placeholder until the pixel UI in M2) and floating combat text
+- `src/ui/` the pixel UI rebuilt from PD's atlases and bitmap fonts at PD's integer zoom: `pixel/` (fonts, nine-patches,
+  widgets), `hudParts.tsx` (status pane, toolbar, log), `windows.tsx` (WndBag, WndItem, ...), `GameUI.tsx` (root)
+- `src/render/fx/` particles (PD emitters), blob clouds, magic bolts, thrown items, flares, shake
+- `src/audio/` original music and sound effects (Web Audio, panned by screen position)
+- `src/platform/` IndexedDB saves and app lifecycle (save on pause)
 - `src/gallery/` dev page showing every sprite and item voxelized and animated
 - `tools/` reference fetcher, asset importer, sprite-definition extractor (parses `*Sprite.java`)

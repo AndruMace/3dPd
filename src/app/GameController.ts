@@ -11,6 +11,7 @@ import { Inspect, type ExamineView, type StatusView } from '../engine/Inspect';
 import type { GameEvent } from '../engine/core/events';
 import type { Prompt } from '../engine/core/ui';
 import { HEIGHT, WIDTH } from '../engine/levels/constants';
+import { onAppPause } from '../platform/lifecycle';
 import { Storage } from '../platform/storage';
 import { CameraRig } from '../render/camera/CameraRig';
 import { CharView, cellToWorld, MOVE_INTERVAL } from '../render/actors/CharView';
@@ -137,13 +138,13 @@ export class GameController {
     this.floating = new FloatingTextLayer(container);
     this.bindInput();
     addEventListener('resize', () => this.resize());
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') {
+    onAppPause(
+      () => {
         void this.save();
         Audio.pause();
-      } else Audio.resume();
-    });
-    addEventListener('pagehide', () => void this.save());
+      },
+      () => Audio.resume(),
+    );
     this.resize();
     this.renderer.setAnimationLoop(() => this.frame());
   }

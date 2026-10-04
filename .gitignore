@@ -4,3 +4,13 @@ reference/
 public/assets/
 .DS_Store
 *.log
+ios/App/build/
+# Capacitor native build output and copied web assets
+android/.gradle/
+android/**/build/
+android/local.properties
+android/app/src/main/assets/public/
+android/capacitor-cordova-android-plugins/
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+android/app/src/main/assets/capacitor.config.json
