@@ -235,8 +235,6 @@ Prototype both in phase 1 behind a debug toggle, then pick one by eye.
 
 ## Phases
 
-## Phases
-
 Each phase ends playable and committed on `realtime-arpg`.
 
 1. **Walk the sewers** — the world clock, `Body` and collision, the 3 m cell scale (geometry, props and doors
