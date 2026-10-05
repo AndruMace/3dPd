@@ -36,7 +36,20 @@ export type GameEvent =
     }
   | { type: 'heroDied' }
   /** A visual effect: particle bursts/emitters (fx = PD factory name), splashes, flares, shakes, bolts... */
-  | { type: 'fx'; fx: string; pos?: number; id?: number; to?: number; color?: number; n?: number; v?: number }
+  | {
+      type: 'fx';
+      fx: string;
+      pos?: number;
+      id?: number;
+      to?: number;
+      color?: number;
+      n?: number;
+      v?: number;
+      /** Action mode: a point in the world (cells) and a radius, for ground telegraphs. */
+      x?: number;
+      z?: number;
+      r?: number;
+    }
   | { type: 'charState'; id: number; state: CharState; on: boolean }
   /** A heap changed: image -1 means it is gone. `from` animates a drop from that cell. */
   | { type: 'heap'; pos: number; image: number; heapType: string; glow: number | null; from?: number }

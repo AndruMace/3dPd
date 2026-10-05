@@ -72,6 +72,13 @@ function play(seed: string): Result {
           continue;
         }
       }
+      // Open chests and tombs, talk to the Ghost, unlock doors, read signs whenever offered.
+      const it = ActionGame.interaction();
+      if (it && it.kind !== 'descend' && it.kind !== 'ascend' && Math.random() < Tuning.STEP * 2) {
+        ActionGame.interact();
+        interactions++;
+        continue;
+      }
       const bodies = ActionGame.bodies();
       const hb = bodies.get(hero)!;
       const enemyNear = [...Dungeon.level.mobs].some(
@@ -123,6 +130,7 @@ function play(seed: string): Result {
 }
 
 let itemsUsed = 0;
+let interactions = 0;
 const results: Result[] = [];
 for (let i = 0; i < runs; i++) results.push(play(`action-${i}`));
 const crashes = results.filter((r) => r.error);
@@ -133,6 +141,7 @@ for (const r of results) if (!r.alive && !r.error) causes.set(r.cause, (causes.g
 console.log(`${runs} action runs (${seconds}s each), ${crashes.length} crashes`);
 console.log('depth reached:', Object.fromEntries([...depths].sort((a, b) => a[0] - b[0])));
 console.log('deaths:', Object.fromEntries(causes));
+console.log('interactions per run:', (interactions / runs).toFixed(1));
 console.log('items used per run:', (itemsUsed / runs).toFixed(1));
 console.log('kills per run:', (results.reduce((n, r) => n + r.kills, 0) / runs).toFixed(1));
 for (const c of crashes.slice(0, 5))

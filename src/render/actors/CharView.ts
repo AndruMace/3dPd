@@ -30,6 +30,9 @@ export class CharView extends THREE.Group {
   readonly states = new Set<CharState>();
   private t = Math.random() * 10;
   private telegraphT = 0;
+  private hopT = 1;
+  private hopLen = 1;
+  private hopHeight = 0;
   private telegraphLen = 0;
   private dying = false;
   private fade = 1;
@@ -87,6 +90,13 @@ export class CharView extends THREE.Group {
     this.moveDuration = duration;
     this.moveArc = arc;
     return duration;
+  }
+
+  /** Action mode: an arc in the air (a leap), leaving the ground position to the body. */
+  hop(seconds: number, height: number): void {
+    this.hopT = 0;
+    this.hopLen = seconds;
+    this.hopHeight = height;
   }
 
   /** CharSprite.fall(): drop into a chasm (scale down and sink), then vanish. */
@@ -171,6 +181,11 @@ export class CharView extends THREE.Group {
       this.position.y = -(1 - k) * 1.5;
       if (k === 0) this.fade = 0;
       this.dying = this.dying || k === 0;
+    }
+    if (this.hopT < this.hopLen) {
+      this.hopT += dt;
+      const k = Math.min(1, this.hopT / this.hopLen);
+      this.position.y = this.hopHeight * 4 * k * (1 - k);
     }
     // Paralysed and frozen characters stop animating.
     const frozen = this.states.has('PARALYSED') || this.states.has('FROZEN');

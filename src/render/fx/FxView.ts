@@ -60,6 +60,7 @@ export class FxView extends THREE.Group {
   private rays: Ray[] = [];
   private flares: Flare[] = [];
   private flashes: { mesh: THREE.Mesh; t: number; duration: number; grow: boolean }[] = [];
+  private areas: { group: THREE.Group; fill: THREE.Mesh; t: number; duration: number }[] = [];
   private shakeT = 0;
   private shakeDuration = 0;
   private shakeIntensity = 0;
@@ -171,6 +172,23 @@ export class FxView extends THREE.Group {
     this.burst('Speck.LIGHT', at, 8, color);
   }
 
+  /** Action mode: a telegraphed area on the floor (a red ring filling up until the blow lands). */
+  areaWarning(x: number, z: number, r: number, seconds: number): void {
+    const group = new THREE.Group();
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(r * 0.92, r, 40).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.9, depthWrite: false }),
+    );
+    const fill = new THREE.Mesh(
+      new THREE.CircleGeometry(r, 40).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.25, depthWrite: false }),
+    );
+    group.add(ring, fill);
+    group.position.set(x, 0.04, z);
+    this.add(group);
+    this.areas.push({ group, fill, t: 0, duration: seconds });
+  }
+
   shake(intensity: number, duration: number): void {
     this.shakeIntensity = intensity;
     this.shakeDuration = this.shakeT = duration;
@@ -227,6 +245,15 @@ export class FxView extends THREE.Group {
     }
     this.flashes = this.flashes.filter((f) => f.t < f.duration);
 
+    for (const a of this.areas) {
+      a.t += dt;
+      const k = Math.min(1, a.t / a.duration);
+      a.fill.scale.setScalar(Math.max(0.05, k));
+      (a.fill.material as THREE.MeshBasicMaterial).opacity = 0.15 + 0.3 * k;
+      if (a.t >= a.duration) a.group.removeFromParent();
+    }
+    this.areas = this.areas.filter((a) => a.t < a.duration);
+
     if (this.shakeT > 0) {
       this.shakeT -= dt;
       const p = (this.shakeIntensity * Math.max(0, this.shakeT)) / this.shakeDuration / 16;
@@ -243,6 +270,8 @@ export class FxView extends THREE.Group {
     this.bolts = [];
     this.rays = [];
     for (const f of this.flashes) f.mesh.removeFromParent();
+    for (const a of this.areas) a.group.removeFromParent();
+    this.areas = [];
     this.flares = [];
     this.streams = [];
     this.flashes = [];

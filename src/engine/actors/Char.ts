@@ -79,6 +79,9 @@ export abstract class Char extends Actor {
     return false;
   }
 
+  /** Action mode: appear right beside this character (a swarm's split) rather than in the middle of a cell. */
+  realtimeSpawnNear: Char | null = null;
+
   showStatus(color: StatusColor, text: string): void {
     Events.emit({ type: 'status', id: this.id(), text, color });
   }

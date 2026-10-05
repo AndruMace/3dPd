@@ -323,3 +323,182 @@ describe('Action mode systems', () => {
     ActionGame.enable(false);
   });
 });
+
+describe('Action mode: sewer specials', () => {
+  async function setup(seed: number) {
+    ActionGame.enable(true);
+    Game.newGame({ seed, heroClass: 'WARRIOR' });
+    if (Game.prompt) Game.answer(null);
+    Game.drainEvents();
+    for (const m of [...Dungeon.level.mobs]) Dungeon.level.mobs.delete(m);
+    const { Actor } = await import('../src/engine/actors/Actor');
+    const mobs = await import('../src/engine/actors/mobs/mobs');
+    const hero = Dungeon.hero;
+    /** A free, visible cell `d` steps from the hero (Chebyshev). */
+    const { distance } = await import('../src/engine/levels/constants');
+    const freeCell = (d: number) => {
+      for (let c = 0; c < Dungeon.level.map.length; c++)
+        if (
+          Dungeon.level.passable[c] &&
+          Dungeon.visible[c] &&
+          distance(c, hero.pos) === d &&
+          !Dungeon.level.heaps.has(c)
+        )
+          return c;
+      throw new Error('no free cell');
+    };
+    const place = <T extends { pos: number; state: string }>(m: T, cell: number, state = 'HUNTING') => {
+      m.pos = cell;
+      m.state = state;
+      Dungeon.level.mobs.add(m as never);
+      Actor.add(m as never);
+      return m;
+    };
+    const step = (n: number, input: object = {}) => {
+      for (let i = 0; i < n; i++) ActionGame.update(Tuning.STEP, { moveX: 0, moveZ: 0, ...input });
+    };
+    return { hero, mobs, freeCell, place, step };
+  }
+
+  it('a swarm splits right beside itself', async () => {
+    const { hero, mobs, freeCell, place, step } = await setup(31);
+    const swarm = place(new mobs.Swarm(), freeCell(1));
+    step(1);
+    swarm.damage(5, hero);
+    swarm.defenseProc(hero, 5);
+    step(2);
+    const clones = [...Dungeon.level.mobs].filter((m) => m !== swarm && m instanceof mobs.Swarm);
+    expect(clones.length).toBe(1);
+    const a = ActionGame.bodies().get(swarm)!;
+    const b = ActionGame.bodies().get(clones[0])!;
+    expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeLessThan(0.6);
+    ActionGame.enable(false);
+  });
+
+  it('a thief steals, runs, and turns on you when cornered', async () => {
+    const { hero, mobs, freeCell, place, step } = await setup(32);
+    const thief = place(new mobs.Thief(), freeCell(1));
+    const items0 = hero.belongings.backpack.items.length;
+    for (let i = 0; i < 400 && thief.item === null; i++) step(1);
+    expect(thief.item).not.toBeNull();
+    expect(hero.belongings.backpack.items.length).toBeLessThan(items0);
+    expect(thief.state).toBe('FLEEING');
+    // Paralyse the hero so the thief gets away, then make sure it doesn't freeze when it runs out of room.
+    let sawHunting = false;
+    for (let i = 0; i < 1800 && !sawHunting; i++) {
+      step(1);
+      if (thief.state === 'HUNTING') sawHunting = true;
+    }
+    // Either it was cornered (PD: "#$%^" and back to the attack) or it's still running: never stuck at 0 speed.
+    const tb = ActionGame.bodies().get(thief);
+    expect(sawHunting || (tb && Math.hypot(tb.vx, tb.vz) > 0)).toBe(true);
+    ActionGame.enable(false);
+  });
+
+  it("a skeleton's bones hit those within a metre or so", async () => {
+    const { hero, mobs, freeCell, place, step } = await setup(33);
+    const near = place(new mobs.Skeleton(), freeCell(1));
+    step(1);
+    const hb = ActionGame.bodies().get(hero)!;
+    const sb = ActionGame.bodies().get(near)!;
+    // Put the skeleton right next to the hero and make sure the blast lands.
+    sb.x = hb.x + 0.4;
+    sb.z = hb.z;
+    sb.px = sb.x;
+    sb.pz = sb.z;
+    near.pos = Math.floor(sb.x) + Math.floor(sb.z) * WIDTH;
+    hero.HP = hero.HT = 100;
+    let hit = false;
+    for (let attempt = 0; attempt < 10 && !hit; attempt++) {
+      const hp = hero.HP;
+      near.HP = 1;
+      const fresh = attempt === 0 ? near : place(new mobs.Skeleton(), near.pos);
+      if (attempt > 0) {
+        step(1);
+        const b = ActionGame.bodies().get(fresh)!;
+        b.x = hb.x + 0.4;
+        b.z = hb.z;
+      }
+      fresh.die(hero);
+      hit = hero.HP < hp;
+    }
+    expect(hit).toBe(true);
+    // Far away (two cells): no damage.
+    const far = place(new mobs.Skeleton(), freeCell(2));
+    step(1);
+    Game.drainEvents();
+    far.die(hero);
+    // (Killing it may level the hero up, so look for damage rather than comparing HP.)
+    expect(Game.drainEvents().some((e) => e.type === 'damage' && e.id === hero.id())).toBe(false);
+    ActionGame.enable(false);
+  });
+
+  it("Goo's slam is telegraphed and can be dodged", async () => {
+    const outcome = async (dodge: boolean) => {
+      const { hero, mobs, freeCell, place, step } = await setup(34);
+      const goo = place(new mobs.Goo(), freeCell(1));
+      hero.HP = hero.HT = 1000;
+      // Wait for a slam (the red ring centred on Goo).
+      let ring: { x: number; z: number } | null = null;
+      for (let i = 0; i < 3000 && !ring; i++) {
+        step(1);
+        for (const e of Game.drainEvents())
+          if (e.type === 'fx' && e.fx === 'area' && e.r === Tuning.GOO_SLAM_RADIUS) ring = { x: e.x!, z: e.z! };
+      }
+      expect(ring).not.toBeNull();
+      const hp = hero.HP;
+      const hb = ActionGame.bodies().get(hero)!;
+      const frames = Math.ceil(Tuning.GOO_PUMP / Tuning.STEP) + 2;
+      for (let i = 0; i < frames; i++) {
+        const dx = hb.x - ring!.x;
+        const dz = hb.z - ring!.z;
+        const d = Math.hypot(dx, dz) || 1;
+        step(1, dodge ? { moveX: dx / d, moveZ: dz / d, sprint: true } : {});
+      }
+      const slammed = Game.drainEvents().some((e) => e.type === 'damage' && e.id === hero.id() && e.amount > 0);
+      ActionGame.enable(false);
+      void goo;
+      return { slammed, lost: hp - hero.HP };
+    };
+    const stood = await outcome(false);
+    const ran = await outcome(true);
+    expect(ran.lost).toBeLessThanOrEqual(stood.lost);
+    expect(ran.slammed).toBe(false);
+  });
+
+  it('Interact opens chests and talks to the Ghost', async () => {
+    const { hero, freeCell, place, step } = await setup(35);
+    const { Heap } = await import('../src/engine/items/Heap');
+    const { Gold } = await import('../src/engine/items/misc');
+    // A chest next to the hero.
+    const cell = freeCell(1);
+    const heap = Dungeon.level.drop(new Gold(10), cell);
+    heap.type = 'CHEST';
+    void Heap;
+    step(1);
+    const hb = ActionGame.bodies().get(hero)!;
+    // Walk next to it.
+    const cx = (cell % WIDTH) + 0.5;
+    const cz = Math.floor(cell / WIDTH) + 0.5;
+    for (let i = 0; i < 100 && Math.hypot(cx - hb.x, cz - hb.z) > 0.7; i++) {
+      const d = Math.hypot(cx - hb.x, cz - hb.z);
+      step(1, { moveX: (cx - hb.x) / d, moveZ: (cz - hb.z) / d });
+    }
+    expect(ActionGame.interaction()?.kind).toBe('open');
+    ActionGame.interact();
+    expect(Dungeon.level.heaps.get(cell)?.type ?? 'HEAP').toBe('HEAP');
+    // The Ghost: talking opens its quest dialog.
+    const { Ghost } = await import('../src/engine/actors/mobs/npcs');
+    const ghost = place(new Ghost(), freeCell(1), 'PASSIVE');
+    step(1);
+    const gb = ActionGame.bodies().get(ghost)!;
+    for (let i = 0; i < 100 && Math.hypot(gb.x - hb.x, gb.z - hb.z) > 0.6; i++) {
+      const d = Math.hypot(gb.x - hb.x, gb.z - hb.z);
+      step(1, { moveX: (gb.x - hb.x) / d, moveZ: (gb.z - hb.z) / d });
+    }
+    expect(ActionGame.interaction()?.kind).toBe('talk');
+    ActionGame.interact();
+    expect(Game.prompt).not.toBeNull();
+    ActionGame.enable(false);
+  });
+});

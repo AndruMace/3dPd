@@ -1,6 +1,7 @@
 // Port of the run-wide state in Dungeon.java and Statistics.java. Kept as plain module-level objects (as PD's
 // statics were) so ported code can say `Dungeon.hero` / `Dungeon.level`. Only type imports and core utilities
 // here, so any module can import it without creating class-initialization cycles.
+import type { Char } from './actors/Char';
 import type { Hero } from './actors/hero/Hero';
 import { classNameOf } from './core/Bundle';
 import { Random } from './core/Random';
@@ -65,6 +66,10 @@ interface DungeonState {
   nightMode: boolean;
   /** Action mode: the run is played in real time (see realtime/ActionGame). */
   realtime: boolean;
+  /** Action mode: the characters whose bodies are within `radius` cells of `ch`'s (installed by ActionGame). */
+  realtimeNear: (ch: Char, radius: number) => Char[];
+  /** Action mode: shove `target` away from `from` (cells per second of push), instead of moving it a cell. */
+  realtimePush: (target: Char, from: Char, strength: number) => void;
   resultDescription: string;
   /** Story chapters already shown (WndStory ids). */
   chapters: Set<number>;
@@ -109,6 +114,8 @@ export const Dungeon: DungeonState = {
   challenges: 0,
   nightMode: false,
   realtime: false,
+  realtimeNear: () => [],
+  realtimePush: () => {},
   resultDescription: '',
   chapters: new Set(),
   droppedItems: new Map(),

@@ -42,6 +42,15 @@ export interface GameNav {
 }
 
 const TOOLBAR_HEIGHT = 25;
+const INTERACT_LABELS: Record<string, string> = {
+  descend: 'Descend',
+  ascend: 'Ascend',
+  talk: 'Talk',
+  open: 'Open',
+  unlock: 'Unlock',
+  read: 'Read',
+  cook: 'Cook',
+};
 /** Touch screens get on-screen Attack/Run buttons; mouse and keyboard use click, F and Shift. */
 const TOUCH = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
@@ -251,7 +260,7 @@ export function GameUI({
       {state.action && state.interaction && state.ready && !state.prompt && (
         <div class="interact-button" style={{ bottom: `${TOOLBAR_HEIGHT + 42}px` }}>
           <RedButton
-            label={state.interaction.kind === 'descend' ? 'Descend' : 'Ascend'}
+            label={INTERACT_LABELS[state.interaction.kind]}
             width={64}
             height={20}
             onClick={() => game.interact()}

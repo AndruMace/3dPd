@@ -15,10 +15,10 @@ import { Sample } from '../core/fx';
 import { UI } from '../core/ui';
 import { Item } from '../items/Item';
 import { Amulet } from '../items/misc';
-import { Chasm } from '../levels/features';
+import { Chasm, Sign } from '../levels/features';
 import type { Level } from '../levels/Level';
 import { Terrain as T } from '../levels/Terrain';
-import { WIDTH } from '../levels/constants';
+import { distance, NEIGHBOURS8, WIDTH } from '../levels/constants';
 import { observe } from '../observe';
 import { thinkMob } from './brain';
 import { moveCircle } from './collision';
@@ -55,7 +55,11 @@ export interface ActionInput {
   sprint?: boolean;
 }
 
-export type Interaction = { kind: 'descend' | 'ascend'; cell: number };
+/** What the Interact button does where the hero stands, and on which cell. */
+export type Interaction = {
+  kind: 'descend' | 'ascend' | 'talk' | 'open' | 'unlock' | 'read' | 'cook';
+  cell: number;
+};
 
 const cellOf = (x: number, z: number) => Math.floor(x) + Math.floor(z) * WIDTH;
 
@@ -97,6 +101,23 @@ function makeBody(ch: Char): Body {
   return { char: ch, x, z, px: x, pz: z, vx: 0, vz: 0, kx: 0, kz: 0, radius: Tuning.BODY_RADIUS, facing: 0 };
 }
 
+/** A new character's body: in its cell's middle, or right beside the one it split from (a swarm). */
+function spawnBody(ch: Char): Body {
+  const b = makeBody(ch);
+  const near = ch.realtimeSpawnNear ? bodies.get(ch.realtimeSpawnNear) : undefined;
+  ch.realtimeSpawnNear = null;
+  if (near && Dungeon.level) {
+    const a = Math.random() * Math.PI * 2;
+    const lvl = Dungeon.level;
+    [b.x, b.z] = moveCircle(lvl.map, walk, near.x, near.z, b.radius, Math.cos(a) * 0.3, Math.sin(a) * 0.3);
+    b.px = b.x;
+    b.pz = b.z;
+    const cell = cellOf(b.x, b.z);
+    if (cell !== ch.pos) ch.pos = cell;
+  }
+  return b;
+}
+
 /** Keeps bodies in step with the engine: new level, new or dead mobs, and characters the engine moved itself. */
 function reconcile(): void {
   if (Dungeon.level !== level) {
@@ -113,7 +134,7 @@ function reconcile(): void {
   for (const ch of bodies.keys()) if (!alive.has(ch)) bodies.delete(ch);
   for (const ch of chars) {
     const b = bodies.get(ch);
-    if (!b) bodies.set(ch, makeBody(ch));
+    if (!b) bodies.set(ch, spawnBody(ch));
     // Teleports, blinks: the engine moved the character to another cell.
     else if (cellOf(b.x, b.z) !== ch.pos) bodies.set(ch, makeBody(ch));
   }
@@ -548,6 +569,23 @@ export const ActionGame = {
   /** Switch the engine to action mode (call before starting or loading a run). */
   enable(on = true): void {
     Game.realtime = on;
+    Dungeon.realtimeNear = (ch, radius) => {
+      const from = bodies.get(ch);
+      if (!from) return [];
+      const out: Char[] = [];
+      for (const [c, b] of bodies) if (c !== ch && Math.hypot(b.x - from.x, b.z - from.z) <= radius) out.push(c);
+      return out;
+    };
+    Dungeon.realtimePush = (targetCh, from, strength) => {
+      const tb = bodies.get(targetCh);
+      const fb = bodies.get(from);
+      if (!tb || !fb) return;
+      const dx = tb.x - fb.x;
+      const dz = tb.z - fb.z;
+      const d = Math.hypot(dx, dz) || 1;
+      tb.kx += (dx / d) * strength;
+      tb.kz += (dz / d) * strength;
+    };
     level = null;
     bodies.clear();
     target = swingTarget = null;
@@ -638,27 +676,91 @@ export const ActionGame = {
     return acc / Tuning.STEP;
   },
 
-  /** What Interact would do where the hero stands. */
+  /**
+   * What Interact would do here: talk to a friendly character, open a chest/tomb/remains, unlock a door, read a
+   * sign, use the alchemy pot, take the stairs. The nearest such thing within reach wins.
+   */
   interaction(): Interaction | null {
     const hero = Dungeon.hero;
-    if (!hero) return null;
-    if (hero.pos === Dungeon.level.exit) return { kind: 'descend', cell: hero.pos };
-    if (hero.pos === Dungeon.level.entrance) return { kind: 'ascend', cell: hero.pos };
-    return null;
+    if (!hero || !Dungeon.level) return null;
+    const lvl = Dungeon.level;
+    const hb = bodies.get(hero);
+    if (!hb) return null;
+    let best: Interaction | null = null;
+    let bestScore = Infinity;
+    // Talking, opening and unlocking come before reading signs, cooking and stairs; then the nearest wins.
+    const PRIORITY: Record<Interaction['kind'], number> = {
+      talk: 0,
+      open: 1,
+      unlock: 1,
+      cook: 2,
+      read: 2,
+      descend: 3,
+      ascend: 3,
+    };
+    const offer = (kind: Interaction['kind'], cell: number, x: number, z: number, reach: number) => {
+      const d = Math.hypot(x - hb.x, z - hb.z);
+      const score = PRIORITY[kind] * 100 + Math.min(d, 50);
+      if (d <= reach && score < bestScore) {
+        bestScore = score;
+        best = { kind, cell };
+      }
+    };
+    const centre = (c: number): [number, number] => [(c % WIDTH) + 0.5, Math.floor(c / WIDTH) + 0.5];
+    // Friendly characters (the Ghost, the Rat King, bees, sheep...).
+    for (const m of lvl.mobs) {
+      if (m.hostile || !('interact' in m) || !Dungeon.visible[m.pos]) continue;
+      const b = bodies.get(m);
+      if (b && distance(m.pos, hero.pos) <= 1) offer('talk', m.pos, b.x, b.z, 0.9);
+    }
+    // The hero's cell and its neighbours.
+    for (const n of [0, ...NEIGHBOURS8]) {
+      const c = hero.pos + n;
+      const [x, z] = centre(c);
+      const heap = lvl.heaps.get(c);
+      if (heap && heap.type !== 'HEAP' && heap.type !== 'HIDDEN' && heap.type !== 'FOR_SALE')
+        offer('open', c, x, z, 1.0);
+      const t = lvl.map[c];
+      if (t === T.LOCKED_DOOR || t === T.LOCKED_EXIT) offer('unlock', c, x, z, 0.95);
+      if (t === T.SIGN) offer('read', c, x, z, 0.85);
+      if (t === T.ALCHEMY && n !== 0) offer('cook', c, x, z, 0.95);
+    }
+    if (hero.pos === lvl.exit) offer('descend', hero.pos, hb.x, hb.z, Infinity);
+    if (hero.pos === lvl.entrance) offer('ascend', hero.pos, hb.x, hb.z, Infinity);
+    return best;
   },
 
-  /** The Interact button: take the stairs (Hero.actDescend / actAscend on arrival). */
+  /** The Interact button. Most things are PD's own hero actions, which resolve at once when next to them. */
   interact(): void {
     const it = ActionGame.interaction();
     if (!it) return;
     const hero = Dungeon.hero;
-    if (it.kind === 'ascend' && Dungeon.depth === 1) {
-      if (hero.belongings.getItem(Amulet) === null) UI.message('One does not simply leave Pixel Dungeon.');
-      else hero.pendingTransition = 'win';
-      return;
+    switch (it.kind) {
+      case 'read':
+        Sign.read(it.cell);
+        return;
+      case 'talk':
+      case 'open':
+      case 'unlock':
+      case 'cook': {
+        const hb = bodies.get(hero)!;
+        hb.facing = Math.atan2(Math.floor(it.cell / WIDTH) + 0.5 - hb.z, (it.cell % WIDTH) + 0.5 - hb.x);
+        hero.handle(it.cell);
+        hero.ready = true;
+        return;
+      }
+      case 'ascend':
+        if (Dungeon.depth === 1) {
+          if (hero.belongings.getItem(Amulet) === null) UI.message('One does not simply leave Pixel Dungeon.');
+          else hero.pendingTransition = 'win';
+          return;
+        }
+      // falls through
+      case 'descend': {
+        const hunger = hero.buff(Hunger);
+        if (hunger !== null && !hunger.isStarving()) hunger.satisfy(-Hunger.STARVING / 10);
+        hero.pendingTransition = it.kind;
+      }
     }
-    const hunger = hero.buff(Hunger);
-    if (hunger !== null && !hunger.isStarving()) hunger.satisfy(-Hunger.STARVING / 10);
-    hero.pendingTransition = it.kind;
   },
 };

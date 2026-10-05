@@ -232,6 +232,23 @@ Prototype both in phase 1 behind a debug toggle, then pick one by eye.
   - Allies: bees and mirror images fight hostile mobs and otherwise follow the hero. Sheep time out on the world
     clock. Piranhas still drown on land.
   - The action bot now also uses items at random.
+- **Phase 4 (the rest of the Sewers): done.**
+  - Most specials already worked through PD's hooks (`attackProc`, `defenseProc`, `die`): fetid rat gas, albino
+    bleeding, mimic gold theft, statues waking when hit, wraiths from tombs. Real-time-specific changes:
+    - **Goo:**
+      - One blow in three becomes a **slam**: a red ring on the floor fills for 1.5 s, then everyone inside
+        takes PD's pumped-up damage. Step out to dodge.
+      - Kept at a distance, it **leaps**: it crouches, the landing spot is marked, then it lands with a
+        shockwave and a screen shake.
+      - It still heals in water and seals the arena.
+    - **Skeleton:** the bone burst hits whoever is within about 1 m, not everyone in the eight 3 m cells around.
+    - **Swarm:** splits appear right beside the parent.
+    - **Thief/bandit:** steals, flees, and turns on you when cornered (PD's `nowhereToRun`).
+    - **Curse personification:** pushes you with knockback, and regenerates per turn.
+  - **Interact** is general now. In priority order it offers: talk (Ghost, Rat King, allies), open (chests,
+    tombs, remains, mimics), unlock (with keys), read signs, cook at the alchemy pot, then stairs. All run
+    through PD's own hero actions.
+  - The action bot also interacts whenever it can.
 
 ## Phases
 

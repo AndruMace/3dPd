@@ -993,8 +993,13 @@ export class GameController {
         if (at) this.fx.burst('SmokeParticle', at, 6);
         return 0;
       }
+      case 'area':
+        if (e.x !== undefined && e.z !== undefined) this.fx.areaWarning(e.x, e.z, e.r ?? 0.5, e.v ?? 1);
+        return 0;
       case 'pushing':
       case 'swap': {
+        // Action mode: bodies carry characters; pushes are knockback in the engine.
+        if (this.action) return 0;
         const v = this.chars.get(e.id!);
         if (!v) return 0;
         if (!v.visible) {
@@ -1007,6 +1012,11 @@ export class GameController {
       case 'jump': {
         const v = this.chars.get(e.id!);
         if (!v) return 0;
+        if (this.action) {
+          v.sprite.play('jump', true);
+          v.hop(0.45, 0.7);
+          return 0;
+        }
         const d = this.world(e.pos!).distanceTo(this.world(e.to!));
         v.turnTo(e.pos!, e.to!, cam);
         v.sprite.play('jump', true);

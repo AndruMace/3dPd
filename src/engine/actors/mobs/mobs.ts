@@ -175,6 +175,7 @@ export class Swarm extends Mob {
       }
       if (candidates.length > 0) {
         const clone = this.split();
+        clone.realtimeSpawnNear = this;
         clone.HP = Math.trunc((this.HP - damage) / 2);
         clone.pos = Random.element(candidates)!;
         clone.state = 'HUNTING';
@@ -226,9 +227,12 @@ export class Skeleton extends Mob {
   die(cause: object | null): void {
     super.die(cause);
     let heroKilled = false;
-    for (const n of NEIGHBOURS8) {
-      const ch = Actor.findChar(this.pos + n);
-      if (ch && ch.isAlive()) {
+    // Action mode: the bones fly about a metre, not into all eight 3 m cells around (nor miss a shared cell).
+    const around = Dungeon.realtime
+      ? Dungeon.realtimeNear(this, 0.75)
+      : NEIGHBOURS8.map((n) => Actor.findChar(this.pos + n));
+    for (const ch of around) {
+      if (ch && ch !== this && ch.isAlive()) {
         const damage = Math.max(0, this.damageRoll() - Random.IntRange(0, Math.trunc(ch.dr() / 2)));
         ch.damage(damage, this);
         if (ch === Dungeon.hero && !ch.isAlive()) heroKilled = true;
@@ -424,6 +428,10 @@ export class CursePersonification extends Mob {
     return 1;
   }
   attackProc(enemy: Char, damage: number): number {
+    if (Dungeon.realtime) {
+      Dungeon.realtimePush(enemy, this, 4);
+      return super.attackProc(enemy, damage);
+    }
     const level = Dungeon.level;
     for (const ofs of NEIGHBOURS8) {
       if (enemy.pos - this.pos === ofs) {
@@ -442,6 +450,9 @@ export class CursePersonification extends Mob {
   protected act(): boolean {
     if (this.HP > 0 && this.HP < this.HT) this.HP++;
     return super.act();
+  }
+  realtimeTurn(): void {
+    if (this.HP > 0 && this.HP < this.HT) this.HP++;
   }
   die(_cause: object | null): void {
     const ghost = new Ghost();
@@ -713,6 +724,9 @@ export class Statue extends Mob {
     if (Dungeon.visible[this.pos]) Journal.add('STATUE');
     return super.act();
   }
+  realtimeTurn(): void {
+    if (Dungeon.visible[this.pos]) Journal.add('STATUE');
+  }
   damageRoll(): number {
     return Random.NormalIntRange(this.weapon.min(), this.weapon.max());
   }
@@ -783,11 +797,19 @@ export class Goo extends Mob {
     return 2;
   }
   protected act(): boolean {
+    this.realtimeTurn();
+    return super.act();
+  }
+  realtimeTurn(): void {
     if (Dungeon.level.water[this.pos] && this.HP < this.HT) {
       Fx.burst('Speck.HEALING', { id: this.id() }, 1);
       this.heal(1);
     }
-    return super.act();
+  }
+  /** Action mode: Goo's slam and leap (see realtime/brain); `jumped` is the leap's accuracy penalty. */
+  setPumped(pumped: boolean, jumped: boolean): void {
+    this.pumpedUp = pumped;
+    this.jumped = jumped;
   }
   protected canAttack(enemy: Char): boolean {
     return this.pumpedUp ? this.distanceTo(enemy) <= 2 : super.canAttack(enemy);

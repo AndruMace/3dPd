@@ -69,6 +69,20 @@ export const Tuning = {
   MOB_WINDUP: 0.4,
   /** Per-mob wind-ups (class names). */
   WINDUPS: { Rat: 0.32, Albino: 0.32, Gnoll: 0.42, Crab: 0.5, FetidRat: 0.4 } as Record<string, number>,
+  // ---- Goo ----
+  /** The slam: Goo swells for this long, then hits everything within GOO_SLAM_RADIUS. */
+  GOO_PUMP: 1.5,
+  GOO_SLAM_RADIUS: 1.0,
+  /** The leap: Goo crouches, then flies to where the hero stood and lands with a shockwave. */
+  GOO_LEAP_WINDUP: 0.7,
+  GOO_LEAP_TIME: 0.45,
+  GOO_LEAP_RADIUS: 0.65,
+  /** It leaps at a hero this far away (PD: pumped-up Goo reaches 2 cells). */
+  GOO_LEAP_RANGE: 2.6,
+  /** How often it considers leaping when the hero keeps away (seconds), and the chance each time. */
+  GOO_LEAP_CHECK: 1.5,
+  GOO_LEAP_CHANCE: 0.5,
+
   /** How often a mob reconsiders its path (seconds). */
   THINK: 0.2,
 };
