@@ -287,8 +287,38 @@ function fightable(m: Mob | null): m is Mob {
   return !!m && m.isAlive() && Dungeon.level.mobs.has(m) && m.hostile && !!Dungeon.visible[m.pos] && bodies.has(m);
 }
 
-/** Auto-target: the closest enemy nearby, favouring those in front of the hero. */
+/** Auto-targeting is on (Settings); when off, Attack only hits what's in reach in front of the hero. */
+let autoTarget = true;
+
+/**
+ * Auto-target: the closest enemy nearby, favouring those in front of the hero. With auto-targeting off, only an
+ * enemy within reach and in front counts.
+ */
 function bestTarget(hb: Body): Mob | null {
+  if (!autoTarget) return frontTarget(hb);
+  return nearestTarget(hb);
+}
+
+function frontTarget(hb: Body): Mob | null {
+  const fx = Math.cos(hb.facing);
+  const fz = Math.sin(hb.facing);
+  let best: Mob | null = null;
+  let bestD = Tuning.MELEE_REACH * 1.15;
+  for (const m of Dungeon.level.mobs) {
+    if (!fightable(m)) continue;
+    const b = bodies.get(m)!;
+    const dx = b.x - hb.x;
+    const dz = b.z - hb.z;
+    const d = Math.hypot(dx, dz);
+    if (d < bestD && (d < 1e-6 || (dx * fx + dz * fz) / d > 0.5)) {
+      bestD = d;
+      best = m;
+    }
+  }
+  return best;
+}
+
+function nearestTarget(hb: Body): Mob | null {
   let best: Mob | null = null;
   let bestScore = Infinity;
   const fx = Math.cos(hb.facing);
@@ -613,6 +643,19 @@ export const ActionGame = {
 
   get sprinting(): boolean {
     return sprinting;
+  },
+
+  /** Settings: pick targets automatically (Attack without a target, throws). */
+  set autoTarget(on: boolean) {
+    autoTarget = on;
+  },
+
+  /** How ready the hero's next swing is, 0 (just swung) .. 1 (ready). */
+  get attackReadiness(): number {
+    const hero = Dungeon.hero;
+    if (!hero) return 1;
+    const full = hero.attackDelay() * Tuning.TURN;
+    return full > 0 ? 1 - Math.min(1, heroCooldown / full) : 1;
   },
 
   /** The hero is sitting down to rest (standing still, nothing hostile in sight). */

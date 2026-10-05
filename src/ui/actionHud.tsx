@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { GameController, MinimapView, ViewState } from '../app/GameController';
 import { Dungeon } from '../engine/Dungeon';
+import { ActionGame } from '../engine/realtime/ActionGame';
 import { flags, Terrain as T } from '../engine/levels/Terrain';
 import { HEIGHT, WIDTH } from '../engine/levels/constants';
 import { Chrome, ItemIcon, NinePatch, Text, useZoom } from './pixel/components';
@@ -31,6 +32,7 @@ export function ActionButtons({ game, state }: { game: GameController; state: Vi
           <div class="action-button-inner">
             <ItemIcon image={weapon ? weapon.imageIndex() : 0} />
           </div>
+          <Cooldown />
         </NinePatch>
       </div>
       <div class="action-button" style={{ right: '40px', bottom: `${TOOLBAR_HEIGHT + 6}px` }}>
@@ -44,6 +46,21 @@ export function ActionButtons({ game, state }: { game: GameController; state: Vi
       </div>
     </>
   );
+}
+
+/** A shade over the Attack button that drains away as the next swing gets ready. */
+function Cooldown() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => {
+      if (ref.current) ref.current.style.height = `${(1 - ActionGame.attackReadiness) * 100}%`;
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <div ref={ref} class="attack-cooldown" />;
 }
 
 /** Name and health of the enemy being fought. */

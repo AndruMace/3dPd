@@ -8,10 +8,28 @@ export interface Prefs {
   mode: 'classic' | 'action';
   /** Action mode: characters turn to face where they go (true) or keep facing the camera (false). */
   turnFigures: boolean;
+  /** Action mode: how fast dragging turns the camera (multiplier). */
+  lookSpeed: number;
+  /** Action mode: the camera swings round behind the hero while moving with the joystick. */
+  cameraFollow: boolean;
+  /** Action mode: Attack and throws pick the nearest enemy when nothing is targeted. */
+  autoTarget: boolean;
+  /** Action mode: which half of the screen the touch joystick lives on (the other half looks around). */
+  stickSide: 'left' | 'right';
 }
 
 const KEY = 'pd3d.prefs';
-const DEFAULTS: Prefs = { scaleUp: true, music: true, sound: true, mode: 'action', turnFigures: false };
+const DEFAULTS: Prefs = {
+  scaleUp: true,
+  music: true,
+  sound: true,
+  mode: 'action',
+  turnFigures: false,
+  lookSpeed: 1,
+  cameraFollow: true,
+  autoTarget: true,
+  stickSide: 'left',
+};
 
 function read(): Prefs {
   try {

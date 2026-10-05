@@ -254,6 +254,8 @@ export function StartScene({
   onClassInfo,
   onBack,
   confirm,
+  mode,
+  onToggleMode,
 }: {
   w: number;
   h: number;
@@ -263,6 +265,9 @@ export function StartScene({
   onClassInfo: (heroClass: string) => void;
   onBack: () => void;
   confirm: (title: string, message: string, options: string[], onSelect: (i: number) => void) => void;
+  /** Action (real time) or Classic (turn-based); each has its own saved run. */
+  mode: 'action' | 'classic';
+  onToggleMode: () => void;
 }) {
   const [cur, setCur] = useState('WARRIOR');
   const landscape = w > h;
@@ -368,6 +373,14 @@ export function StartScene({
           <Text text="This class arrives in a later version of the port." size={9} color="#ffff00" maxWidth={width} />
         </div>
       )}
+      <div class="mode-toggle" style={{ left: '2px', top: '2px' }}>
+        <RedButton
+          label={mode === 'action' ? 'Mode: Action' : 'Mode: Classic'}
+          width={64}
+          height={16}
+          onClick={onToggleMode}
+        />
+      </div>
       <ExitButton onClick={onBack} />
     </div>
   );

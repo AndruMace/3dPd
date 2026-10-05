@@ -284,6 +284,7 @@ export function GameUI({
       )}
       {state.interlevel && <Interlevel text={state.interlevel} />}
       {state.flash && <Flash key={state.flash[1]} color={state.flash[0]} />}
+      {state.hurt !== null && <div key={state.hurt} class="hurt-vignette" />}
     </>
   );
 }

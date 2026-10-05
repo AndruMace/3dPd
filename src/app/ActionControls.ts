@@ -2,6 +2,8 @@
 // 1 for the quickslot (aimed at the mouse), Q to search, Z/C to turn the camera. Mouse: click an enemy to fight it, drag to turn the camera, wheel to zoom. Touch: a floating joystick on the left half of the screen, drag on
 // the right half to look around. Taps (no drag) are passed on, e.g. to answer cell prompts.
 
+import { Settings } from '../platform/settings';
+
 const JOYSTICK_RADIUS = 56; // CSS px
 const TAP_SLOP = 10;
 const LOOK_SPEED = Math.PI / 400; // radians per CSS px dragged
@@ -108,8 +110,9 @@ export class ActionControls {
       if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) y -= 1;
       if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) x += 1;
       if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) x -= 1;
-      if (this.keys.has('KeyZ')) this.host.rotateCamera(-2.2 * dt);
-      if (this.keys.has('KeyC')) this.host.rotateCamera(2.2 * dt);
+      const turn = 2.2 * Settings.get().lookSpeed * dt;
+      if (this.keys.has('KeyZ')) this.host.rotateCamera(-turn);
+      if (this.keys.has('KeyC')) this.host.rotateCamera(turn);
     }
     const keyLen = Math.hypot(x, y);
     if (keyLen > 0) {
@@ -131,7 +134,9 @@ export class ActionControls {
     let kind: TouchPointer['kind'] = 'mouse';
     if (e.pointerType === 'touch' || e.pointerType === 'pen') {
       const hasStick = [...this.pointers.values()].some((p) => p.kind === 'stick');
-      kind = e.clientX - rect.left < rect.width * 0.5 && !hasStick && !this.host.blocked() ? 'stick' : 'look';
+      const leftHalf = e.clientX - rect.left < rect.width * 0.5;
+      const stickHalf = Settings.get().stickSide === 'left' ? leftHalf : !leftHalf;
+      kind = stickHalf && !hasStick && !this.host.blocked() ? 'stick' : 'look';
     }
     this.pointers.set(e.pointerId, {
       id: e.pointerId,
@@ -173,7 +178,7 @@ export class ActionControls {
       this.stickX = Math.cos(ang) * mag;
       this.stickY = -Math.sin(ang) * mag;
     } else if (p.dragged) {
-      this.host.rotateCamera(dx * LOOK_SPEED);
+      this.host.rotateCamera(dx * LOOK_SPEED * Settings.get().lookSpeed);
       this.sinceLook = 0;
     }
   }

@@ -249,6 +249,21 @@ Prototype both in phase 1 behind a debug toggle, then pick one by eye.
     tombs, remains, mimics), unlock (with keys), read signs, cook at the alchemy pot, then stairs. All run
     through PD's own hero actions.
   - The action bot also interacts whenever it can.
+- **Phase 5 (UI and feel): done.**
+  - Health bars over damaged enemies within 6 cells. The target keeps its frame at the top of the screen.
+  - When the hero is hurt: a red vignette at the screen edges plus a small screen shake that scales with the
+    damage.
+  - Sound cues:
+    - Every wind-up plays a low whoosh, panned to where the enemy is.
+    - Goo's telegraphs play a challenge sound.
+  - The touch Attack button shows the swing cooldown, a shade that drains as the next swing gets ready.
+  - New Settings, shown in Action mode: Figures turn, Camera follows, Auto-target, Stick on right, and Look
+    speed (Slow / Normal / Fast). With Auto-target off:
+    - Attack only hits an enemy in reach in front of the hero.
+    - Throws fly straight ahead.
+  - Each mode has its own saved run. The hero-select screen has a Mode toggle (Action / Classic) and shows
+    that mode's save.
+  - Windows taller than the screen scroll inside their frame.
 
 ## Phases
 

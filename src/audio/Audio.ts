@@ -51,14 +51,15 @@ class AudioSystem {
     return p ?? Promise.resolve(null);
   }
 
-  /** Sample.play: `pan` in -1..1. */
-  play(file: string, pan = 0, volume = 1): void {
+  /** Sample.play: `pan` in -1..1; `rate` changes speed and pitch (cues reuse PD's sounds that way). */
+  play(file: string, pan = 0, volume = 1, rate = 1): void {
     if (!this.soundOn || !this.ctx || this.ctx.state !== 'running') return;
     const ctx = this.ctx;
     void this.load(file).then((buffer) => {
       if (!buffer || !this.sfxGain) return;
       const src = ctx.createBufferSource();
       src.buffer = buffer;
+      src.playbackRate.value = rate;
       const gain = ctx.createGain();
       gain.gain.value = volume;
       let node: AudioNode = src;

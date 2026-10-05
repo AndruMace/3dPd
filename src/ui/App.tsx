@@ -2,7 +2,7 @@
 // Owns the pixel root (zoom, safe area) shared by all of them, and the windows the menus open.
 import { useEffect, useState } from 'preact/hooks';
 import { Assets } from '../content/generated/Assets';
-import type { GameController } from '../app/GameController';
+import { saveKey, type GameController } from '../app/GameController';
 import { loadRankings } from '../app/rankings';
 import { Audio } from '../audio/Audio';
 import type { SavedGame } from '../engine/Game';
@@ -73,10 +73,7 @@ export function App({
   useEffect(() => {
     game.setActive(scene === 'game');
     if (scene !== 'game') Audio.music(Assets.THEME);
-    if (scene === 'start')
-      void Storage.get<SavedGame>('game').then((s) =>
-        setSave(s?.info ? { depth: s.info.depth, level: s.info.level, heroClass: s.info.heroClass } : null),
-      );
+    if (scene === 'start') refreshSave();
     if (scene === 'rankings') void loadRankings().then(setTable);
     setWnd(null);
   }, [scene]);
@@ -93,8 +90,13 @@ export function App({
     return () => removeEventListener('keydown', onKey);
   }, [scene, wnd]);
 
+  const refreshSave = () =>
+    void Storage.get<SavedGame>(saveKey()).then((s) =>
+      setSave(s?.info ? { depth: s.info.depth, level: s.info.level, heroClass: s.info.heroClass } : null),
+    );
+
   const newGame = () => {
-    void Storage.remove('game').then(() => {
+    void Storage.remove(saveKey()).then(() => {
       game.start(newSeed());
       setScene('game');
     });
@@ -142,6 +144,11 @@ export function App({
           onNewGame={newGame}
           onLoad={loadGame}
           onClassInfo={(heroClass) => setWnd({ kind: 'class', heroClass })}
+          mode={prefs.mode}
+          onToggleMode={() => {
+            Settings.set({ mode: prefs.mode === 'action' ? 'classic' : 'action' });
+            refreshSave();
+          }}
           onBack={() => setScene('title')}
           confirm={(title, message, options, onSelect) =>
             setWnd({ kind: 'options', title, message, options, onSelect })

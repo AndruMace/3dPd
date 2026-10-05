@@ -173,10 +173,21 @@ body {
 }
 .wnd {
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
+  /* Windows taller than the screen scroll inside their frame. */
+  max-height: 100%;
+  display: flex;
+  min-height: 0;
 }
 .wnd-content {
   display: flex;
   flex-direction: column;
+  max-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+.wnd-content > * {
+  flex-shrink: 0;
 }
 .wnd-below {
   display: flex;
@@ -615,4 +626,58 @@ body {
   height: 100%;
   display: block;
   image-rendering: pixelated;
+}
+
+.mode-toggle {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.health-bars-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.enemy-health {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: #cc0000;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.enemy-health > div {
+  height: 100%;
+  background: #00ee00;
+}
+
+/* Action mode: a red edge when the hero is hurt. */
+.hurt-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(200, 0, 0, 0.55) 100%);
+  opacity: 0;
+  animation: hurt 0.4s ease-out;
+}
+@keyframes hurt {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.attack-cooldown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.attack-button .pixel-nine {
+  position: relative;
 }

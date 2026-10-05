@@ -19,7 +19,7 @@ import { submitRanking } from './rankings';
 import { CameraRig } from '../render/camera/CameraRig';
 import { ChaseCamera } from '../render/camera/ChaseCamera';
 import { ActionGame, type Interaction } from '../engine/realtime/ActionGame';
-import { Settings } from '../platform/settings';
+import { Settings, type Prefs } from '../platform/settings';
 import { ActionControls } from './ActionControls';
 import { CharView, cellToWorld, MOVE_INTERVAL } from '../render/actors/CharView';
 import { HeapView } from '../render/actors/HeapView';
@@ -29,10 +29,15 @@ import { createWorldUniforms, CUT_CHASE, CUT_TOP_DOWN, FogOfWar, type WorldUnifo
 import { LevelView } from '../render/world/LevelView';
 import { TileAtlas } from '../render/world/TileAtlas';
 import { FloatingTextLayer } from '../ui/FloatingText';
+import { HealthBarsLayer } from '../ui/HealthBars';
+import { computeZoom } from '../ui/pixel/components';
 
 const ASSETS = `${import.meta.env.BASE_URL}assets/img/`;
 const TAP_SLOP = 8;
-const SAVE_KEY = 'game';
+/** Each mode keeps its own saved run (an action run and a classic run can both be in progress). */
+export function saveKey(mode: Prefs['mode'] = Settings.get().mode): string {
+  return mode === 'action' ? 'game-action' : 'game';
+}
 const AUTOSAVE_INTERVAL = 15;
 
 /** Everything the pixel UI needs to draw itself. */
@@ -61,6 +66,8 @@ export interface ViewState {
   target: { id: number; name: string; hp: number; ht: number } | null;
   /** Action mode: sprinting right now. */
   sprinting: boolean;
+  /** Action mode: the hero was just hurt (a serial, so each hit restarts the red vignette). */
+  hurt: number | null;
   /** Action mode: the touch Sprint toggle is on. */
   sprintToggle: boolean;
 }
@@ -139,6 +146,9 @@ export class GameController {
   private heroId = -1;
   private readonly heroLight: THREE.PointLight;
   private readonly floating: FloatingTextLayer;
+  private readonly healthBars: HealthBarsLayer;
+  /** Seconds of the "you've been hit" vignette, as [serial] for the UI. */
+  private hurtSerial = 0;
   private readonly timer = new THREE.Timer();
 
   private queue: GameEvent[] = [];
@@ -164,6 +174,7 @@ export class GameController {
     target: null,
     sprinting: false,
     sprintToggle: false,
+    hurt: null,
   };
   onState: (state: ViewState) => void = () => {};
   onLog: (text: string, kind: string) => void = () => {};
@@ -201,6 +212,7 @@ export class GameController {
     this.scene.add(this.aimLine);
 
     this.floating = new FloatingTextLayer(container);
+    this.healthBars = new HealthBarsLayer(container);
     this.controls = new ActionControls(this.renderer.domElement, {
       rotateCamera: (r) => this.chase.rotateBy(r),
       zoomCamera: (f) => this.chase.zoomBy(f),
@@ -283,7 +295,8 @@ export class GameController {
 
   /** Resumes the saved run, if any. */
   async resume(): Promise<boolean> {
-    const saved = await Storage.get<SavedGame>(SAVE_KEY);
+    const key = saveKey();
+    const saved = await Storage.get<SavedGame>(key);
     if (!saved) return false;
     try {
       this.reset();
@@ -296,7 +309,7 @@ export class GameController {
       return true;
     } catch (err) {
       console.error('Could not load the saved game', err);
-      await Storage.remove(SAVE_KEY);
+      await Storage.remove(key);
       return false;
     }
   }
@@ -307,7 +320,7 @@ export class GameController {
     if (!hero || !hero.isAlive() || this.state.dead || this.state.resurrect) return;
     if (Game.prompt !== null || hero.pendingTransition) return;
     this.sinceSave = 0;
-    await Storage.set(SAVE_KEY, Game.save());
+    await Storage.set(saveKey(this.action ? 'action' : 'classic'), Game.save());
   }
 
   private reset(): void {
@@ -508,6 +521,7 @@ export class GameController {
     this.renderer.render(this.scene, cam);
     const { clientWidth: w, clientHeight: h } = this.container;
     this.floating.update(dt, cam, w, h);
+    this.updateHealthBars(cam, w, h);
 
     this.sinceSave += dt;
     if (this.sinceSave > AUTOSAVE_INTERVAL && this.canCommand()) void this.save();
@@ -556,6 +570,7 @@ export class GameController {
       this.actionAlpha = 1;
     } else {
       const [mx, mz] = this.chase.stickToWorld(sx, sy);
+      ActionGame.autoTarget = Settings.get().autoTarget;
       this.actionAlpha = ActionGame.update(dt, {
         moveX: mx,
         moveZ: mz,
@@ -566,7 +581,7 @@ export class GameController {
       this.pendingEngage = null;
       this.enqueue();
       // On touch, the camera swings round behind the direction of travel unless the player is looking around.
-      if (this.controls.touchMoving && this.controls.sinceLook > 1)
+      if (Settings.get().cameraFollow && this.controls.touchMoving && this.controls.sinceLook > 1)
         this.chase.follow(mx, mz, 1.1 * Math.hypot(sx, sy), dt);
     }
     const t = ActionGame.target;
@@ -610,6 +625,23 @@ export class GameController {
         if (Math.abs(lateral) > 0.08) v.sprite.flipped = lateral < 0;
       }
     }
+  }
+
+  /** Action mode: bars over damaged enemies within a few cells (not the target: the HUD frame shows that). */
+  private updateHealthBars(cam: THREE.Camera, w: number, h: number): void {
+    if (!this.action || !Dungeon.hero) {
+      this.healthBars.update([], cam, w, h, 1);
+      return;
+    }
+    const hero = this.chars.get(this.heroId);
+    const targets = [];
+    for (const [id, v] of this.chars) {
+      if (id === this.heroId || !v.visible || v.hp >= v.ht || v.hp <= 0) continue;
+      if (hero && v.position.distanceTo(hero.position) > 6) continue;
+      targets.push({ id, anchor: v, height: (v.sprite.def.frameHeight / 16) * v.scale.y + 0.05, hp: v.hp, ht: v.ht });
+    }
+    const dpr = window.devicePixelRatio || 1;
+    this.healthBars.update(targets, cam, w, h, computeZoom(w, h, dpr) / dpr);
   }
 
   /** Action mode: the ring under the current target. */
@@ -828,7 +860,14 @@ export class GameController {
           v.ht = e.ht;
           if (e.amount > 0) v.flash();
         }
-        if (e.id === this.heroId) this.patchHp(e.hp, e.ht);
+        if (e.id === this.heroId) {
+          this.patchHp(e.hp, e.ht);
+          // Action mode: getting hit should be felt (a red edge and a small shake).
+          if (this.action && e.amount > 0) {
+            this.patch({ hurt: ++this.hurtSerial });
+            this.fx.shake(1 + Math.min(3, e.amount / 4), 0.18);
+          }
+        }
         return 0;
       }
       case 'hp': {
@@ -902,7 +941,7 @@ export class GameController {
         void submitRanking(e.record);
         return 0;
       case 'heroDied':
-        void Storage.remove(SAVE_KEY);
+        void Storage.remove(saveKey(this.action ? 'action' : 'classic'));
         Audio.play(Assets.SND_DEATH);
         this.patch({ dead: Dungeon.resultDescription, examining: false });
         this.refreshStatus();
@@ -995,6 +1034,7 @@ export class GameController {
       }
       case 'area':
         if (e.x !== undefined && e.z !== undefined) this.fx.areaWarning(e.x, e.z, e.r ?? 0.5, e.v ?? 1);
+        this.playSound(Assets.SND_CHALLENGE, e.pos, 0.7, 0.8);
         return 0;
       case 'pushing':
       case 'swap': {
@@ -1069,6 +1109,8 @@ export class GameController {
         // Action mode: a mob is about to strike.
         const v = this.chars.get(e.id!);
         v?.telegraph(e.v ?? 0.4);
+        // A low whoosh as it winds up: you can hear what's about to hit you, even off-screen.
+        if (v && this.fog.visible[v.pos]) this.playSound(Assets.SND_MISS, v.pos, 0.55, 0.7);
         return 0;
       }
       default:
@@ -1114,13 +1156,13 @@ export class GameController {
     });
   }
 
-  private playSound(name: string, pos?: number): void {
+  private playSound(name: string, pos?: number, volume = 1, rate = 1): void {
     let pan = 0;
     if (pos !== undefined && pos >= 0) {
       const p = this.world(pos).project(this.rig.camera);
       pan = Math.max(-1, Math.min(1, p.x)) * 0.7;
     }
-    Audio.play(name, pan);
+    Audio.play(name, pan, volume, rate);
   }
 
   private buildLevel(e: Extract<GameEvent, { type: 'level' }>): void {

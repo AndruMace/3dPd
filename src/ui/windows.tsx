@@ -379,6 +379,12 @@ export function WndGame({
   );
 }
 
+const LOOK_SPEEDS = [
+  { name: 'Slow', v: 0.6 },
+  { name: 'Normal', v: 1 },
+  { name: 'Fast', v: 1.6 },
+];
+
 /** WndSettings: the options that apply to this port (zoom is pinch/scroll in 3D; brightness comes with M7). */
 export function WndSettings({
   prefs,
@@ -407,12 +413,42 @@ export function WndSettings({
           checked={prefs.mode === 'action'}
           onChange={(v) => onChange({ mode: v ? 'action' : 'classic' })}
         />
-        <CheckBox
-          label="Figures turn"
-          width={WIDTH}
-          checked={prefs.turnFigures}
-          onChange={(v) => onChange({ turnFigures: v })}
-        />
+        {prefs.mode === 'action' && (
+          <>
+            <CheckBox
+              label="Figures turn"
+              width={WIDTH}
+              checked={prefs.turnFigures}
+              onChange={(v) => onChange({ turnFigures: v })}
+            />
+            <CheckBox
+              label="Camera follows"
+              width={WIDTH}
+              checked={prefs.cameraFollow}
+              onChange={(v) => onChange({ cameraFollow: v })}
+            />
+            <CheckBox
+              label="Auto-target"
+              width={WIDTH}
+              checked={prefs.autoTarget}
+              onChange={(v) => onChange({ autoTarget: v })}
+            />
+            <CheckBox
+              label="Stick on right"
+              width={WIDTH}
+              checked={prefs.stickSide === 'right'}
+              onChange={(v) => onChange({ stickSide: v ? 'right' : 'left' })}
+            />
+            <RedButton
+              label={`Look speed: ${LOOK_SPEEDS.find((l) => l.v === prefs.lookSpeed)?.name ?? 'Normal'}`}
+              width={WIDTH}
+              onClick={() => {
+                const i = LOOK_SPEEDS.findIndex((l) => l.v === prefs.lookSpeed);
+                onChange({ lookSpeed: LOOK_SPEEDS[(i + 1) % LOOK_SPEEDS.length].v });
+              }}
+            />
+          </>
+        )}
       </div>
     </Window>
   );
