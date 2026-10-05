@@ -63,6 +63,8 @@ interface DungeonState {
   gold: number;
   challenges: number;
   nightMode: boolean;
+  /** Action mode: the run is played in real time (see realtime/ActionGame). */
+  realtime: boolean;
   resultDescription: string;
   /** Story chapters already shown (WndStory ids). */
   chapters: Set<number>;
@@ -106,6 +108,7 @@ export const Dungeon: DungeonState = {
   gold: 0,
   challenges: 0,
   nightMode: false,
+  realtime: false,
   resultDescription: '',
   chapters: new Set(),
   droppedItems: new Map(),

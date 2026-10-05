@@ -99,3 +99,98 @@ describe('Action mode world', () => {
     ActionGame.enable(false);
   });
 });
+
+describe('Action mode combat', () => {
+  /** A fresh run with one awake rat placed a couple of cells from the hero, in plain sight. */
+  async function arena(seed: number) {
+    ActionGame.enable(true);
+    Game.newGame({ seed, heroClass: 'WARRIOR' });
+    if (Game.prompt) Game.answer(null);
+    Game.drainEvents();
+    const { Rat } = await import('../src/engine/actors/mobs/mobs');
+    const level = Dungeon.level;
+    for (const m of [...level.mobs]) {
+      level.mobs.delete(m);
+    }
+    const hero = Dungeon.hero;
+    // A free cell two steps away (in the hero's room).
+    const cell = [2, -2, 2 * WIDTH, -2 * WIDTH, 2 + 2 * WIDTH]
+      .map((d) => hero.pos + d)
+      .find((c) => level.passable[c] && Dungeon.visible[c])!;
+    const rat = new Rat();
+    rat.pos = cell;
+    rat.state = 'HUNTING';
+    level.mobs.add(rat);
+    const { Actor } = await import('../src/engine/actors/Actor');
+    Actor.add(rat);
+    return { hero, rat };
+  }
+
+  it('a hunting rat closes in and bites, and holding attack kills it', async () => {
+    const { hero, rat } = await arena(11);
+    const hp0 = hero.HP;
+    // Stand still: the rat comes over and attacks (armor soaks some bites, so give it ten seconds).
+    let bites = 0;
+    for (let i = 0; i < 300 && hero.HP === hp0; i++) {
+      ActionGame.update(Tuning.STEP, { moveX: 0, moveZ: 0 });
+      bites += Game.drainEvents().filter((e) => e.type === 'attack' && e.id === rat.id()).length;
+    }
+    expect(bites).toBeGreaterThan(0);
+    expect(hero.HP).toBeLessThan(hp0);
+    // Fight back.
+    for (let i = 0; i < 600 && rat.isAlive(); i++) ActionGame.update(Tuning.STEP, { moveX: 0, moveZ: 0, attack: true });
+    expect(rat.isAlive()).toBe(false);
+    expect(hero.exp + (hero.lvl - 1)).toBeGreaterThan(0);
+    ActionGame.enable(false);
+  });
+
+  it('stepping out of reach during the wind-up dodges the blow', async () => {
+    const { hero, rat } = await arena(12);
+    const hb = ActionGame.bodies().get(hero)!;
+    const rb = ActionGame.bodies().get(rat)!;
+    let dodged = 0;
+    // Wait until the rat starts a wind-up, then run directly away from it for a while.
+    const { isWindingUp } = await import('../src/engine/realtime/brain');
+    for (let round = 0; round < 3; round++) {
+      for (let i = 0; i < 200 && !isWindingUp(rat); i++) ActionGame.update(Tuning.STEP, { moveX: 0, moveZ: 0 });
+      expect(isWindingUp(rat)).toBe(true);
+      const hp = hero.HP;
+      const dx = hb.x - rb.x;
+      const dz = hb.z - rb.z;
+      const d = Math.hypot(dx, dz);
+      for (let i = 0; i < 15; i++) ActionGame.update(Tuning.STEP, { moveX: dx / d, moveZ: dz / d });
+      if (hero.HP === hp) dodged++;
+    }
+    // Walls can corner the hero now and then, but running away should usually work.
+    expect(dodged).toBeGreaterThanOrEqual(2);
+    ActionGame.enable(false);
+  });
+
+  it('sprinting is faster and drains hunger faster', async () => {
+    const { hero } = await arena(13);
+    const level = Dungeon.level;
+    level.mobs.clear();
+    const hunger = hero.buff(Hunger)!;
+    const run = (sprint: boolean) => {
+      const hb = ActionGame.bodies().get(hero)!;
+      const h0 = hunger.hungerLevel;
+      let dist = 0;
+      // Run around in a small circle for 2 seconds (walls permitting).
+      for (let i = 0; i < 60; i++) {
+        const a = i * 0.2;
+        const x0 = hb.x;
+        const z0 = hb.z;
+        ActionGame.update(Tuning.STEP, { moveX: Math.cos(a), moveZ: Math.sin(a), sprint });
+        dist += Math.hypot(hb.x - x0, hb.z - z0);
+      }
+      return { dist, hunger: hunger.hungerLevel - h0 };
+    };
+    const walk = run(false);
+    const sprint = run(true);
+    expect(sprint.dist).toBeGreaterThan(walk.dist * 1.3);
+    // PD's own hunger rises in steps of 10 every 10 turns; sprinting adds a steady trickle on top.
+    expect(walk.hunger % 10).toBeLessThan(0.01);
+    expect(sprint.hunger % 10).toBeCloseTo(2 * Tuning.SPRINT_HUNGER, 1);
+    ActionGame.enable(false);
+  });
+});

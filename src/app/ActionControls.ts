@@ -1,5 +1,5 @@
-// Action mode input. Keyboard: WASD/arrows to move, Z/C to turn the camera, E/Space/Enter to interact.
-// Mouse: drag to turn the camera, wheel to zoom. Touch: a floating joystick on the left half of the screen, drag on
+// Action mode input. Keyboard: WASD/arrows to move, Shift to sprint, F/J to attack, E/Space/Enter to interact,
+// Z/C to turn the camera. Mouse: click an enemy to fight it, drag to turn the camera, wheel to zoom. Touch: a floating joystick on the left half of the screen, drag on
 // the right half to look around. Taps (no drag) are passed on, e.g. to answer cell prompts.
 
 const JOYSTICK_RADIUS = 56; // CSS px
@@ -37,6 +37,10 @@ export class ActionControls {
   /** The last movement came from a touch joystick (the camera follows movement only then). */
   touchMoving = false;
   enabled = false;
+  /** The on-screen Attack button is held. */
+  attackButton = false;
+  /** The on-screen Sprint toggle. */
+  sprintToggle = false;
 
   constructor(
     private readonly el: HTMLElement,
@@ -62,12 +66,24 @@ export class ActionControls {
       if (!this.enabled || e.metaKey || e.ctrlKey) return;
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code))
         e.preventDefault();
-      if (this.host.blocked()) return;
+      // Held keys are always tracked (a key pressed during a brief pause still counts once play resumes);
+      // stick() and attacking() ignore them while play is blocked.
       this.keys.add(e.code);
+      if (this.host.blocked()) return;
       if (!e.repeat && (e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter')) this.host.interact();
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
+  }
+
+  /** Attack is held (key or on-screen button). */
+  attacking(): boolean {
+    return !this.host.blocked() && (this.attackButton || this.keys.has('KeyF') || this.keys.has('KeyJ'));
+  }
+
+  /** Sprint is on (Shift held, or the touch toggle). */
+  sprinting(): boolean {
+    return this.sprintToggle || this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
   }
 
   /** Camera-relative movement: x to the right, y forward, length up to 1. */
@@ -165,6 +181,7 @@ export class ActionControls {
   reset(): void {
     this.keys.clear();
     this.stickX = this.stickY = 0;
+    this.attackButton = false;
     this.pointers.clear();
     this.base.classList.remove('active');
   }

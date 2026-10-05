@@ -18,7 +18,8 @@
     "assets": "tsx tools/import-assets.ts && tsx tools/extract-sprite-defs.ts && tsx tools/extract-constants.ts",
     "cap:sync": "npm run build && cap sync",
     "ios": "npm run build && cap sync ios && cap open ios",
-    "android": "npm run build && cap sync android && cap open android"
+    "android": "npm run build && cap sync android && cap open android",
+    "sim:action": "tsx tools/sim/action.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.9",

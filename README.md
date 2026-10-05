@@ -29,6 +29,10 @@ npm run dev      # http://localhost:5173 (?seed=<anything> skips the menus into 
   "invalid source release: 21"). With JDK 21 on `JAVA_HOME`: `cd android && ./gradlew assembleDebug`, e.g.
   `JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew assembleDebug`.
 
+Action mode (default on the `realtime-arpg` branch): WASD or the touch joystick to move, Shift or Run to sprint,
+click/tap an enemy or hold F/Attack to fight, E/Space or Interact for stairs, drag or Z/C to turn the camera, wheel
+to zoom, tap the minimap for a big map. Classic mode (Settings) keeps PD's turn-based controls:
+
 Controls: tap/click to move, attack, pick up or open; drag to rotate the camera, pinch/wheel to zoom.
 Keys: arrows/WASD/vi-keys/numpad to step (relative to the camera), space or `.` to wait (shift: rest), `f` search,
 `x` examine, `i` inventory, `z` quickslot, `q`/`e` rotate, Esc for windows and the menu.

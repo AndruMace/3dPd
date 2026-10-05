@@ -29,6 +29,8 @@ export class CharView extends THREE.Group {
   private fadeSpeed = 0;
   readonly states = new Set<CharState>();
   private t = Math.random() * 10;
+  private telegraphT = 0;
+  private telegraphLen = 0;
   private dying = false;
   private fade = 1;
   private flashT = 0;
@@ -122,6 +124,11 @@ export class CharView extends THREE.Group {
     return anim.frames.length / anim.fps;
   }
 
+  /** Action mode: an attack is coming. The character glows red for the wind-up. */
+  telegraph(seconds: number): void {
+    this.telegraphT = this.telegraphLen = seconds;
+  }
+
   flash(): void {
     this.flashT = FLASH_INTERVAL * 2;
   }
@@ -175,7 +182,18 @@ export class CharView extends THREE.Group {
     const mat = this.sprite.material;
     const flashing = this.flashT > 0;
     this.flashT -= dt;
-    mat.emissiveIntensity = flashing ? 1 : 0;
+    this.telegraphT = Math.max(0, this.telegraphT - dt);
+    if (flashing) {
+      mat.emissive.setRGB(1, 1, 1);
+      mat.emissiveIntensity = 1;
+    } else if (this.telegraphT > 0) {
+      // Builds up towards the strike.
+      const k = 1 - this.telegraphT / Math.max(this.telegraphLen, 1e-3);
+      mat.emissive.setRGB(1, 0.15, 0.1);
+      mat.emissiveIntensity = 0.25 + 0.6 * k;
+    } else {
+      mat.emissiveIntensity = 0;
+    }
     if (this.states.has('FROZEN')) mat.color.setRGB(0.6, 0.8, 1.6);
     else if (this.states.has('ILLUMINATED')) mat.color.setRGB(1.3, 1.3, 1.1);
     else mat.color.setRGB(1, 1, 1);

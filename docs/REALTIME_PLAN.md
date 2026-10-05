@@ -199,6 +199,23 @@ Prototype both in phase 1 behind a debug toggle, then pick one by eye.
     - Settings: **Action mode** and **Figures turn**, the facing prototype.
   - Classic mode is unchanged and still selectable.
 
+- **Phase 2 (fight): done.**
+  - Mobs keep PD's states and noticing rolls. `brain.ts` drives their bodies: they walk PD paths, close in
+    directly, and wind up (glowing red) before PD's attack roll lands. Step out of reach to dodge. Piranhas stay
+    in water.
+  - Hero:
+    - Tap or click an enemy to engage it; hold Attack (F) to auto-target.
+    - Swings land at the impact frame, with PD's attack delay as the cooldown.
+    - A short hitstop and knockback on hits.
+  - Rules: misses graze for 25 % (no special effects).
+- **Extras:**
+  - Sprint: Shift, or the touch Run toggle. Running is 1.6× faster, and hunger drains 1 extra point per second
+    (about 50 % faster).
+  - A minimap fills in from PD's visited and mapped cells. It shows doors, stairs, items, visible enemies and
+    the camera's view cone; tap it for a big map.
+- **Camera:** pitched to 40° and looking half a cell ahead, so enemies in front aren't hidden behind the hero.
+- **`npm run sim:action`:** a headless action-mode bot for crash fuzzing.
+
 ## Phases
 
 Each phase ends playable and committed on `realtime-arpg`.

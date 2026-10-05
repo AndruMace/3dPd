@@ -7,7 +7,9 @@ import * as THREE from 'three';
 const MIN_DIST = 0.9;
 const MAX_DIST = 3.2;
 /** Height of the point the camera looks at, above the hero's feet. */
-const LOOK_HEIGHT = 0.3;
+const LOOK_HEIGHT = 0.25;
+/** The camera looks this far ahead of the hero, so the hero sits low in the frame and what's in front shows. */
+const LOOK_AHEAD = 0.55;
 
 export class ChaseCamera {
   readonly camera: THREE.PerspectiveCamera;
@@ -17,9 +19,9 @@ export class ChaseCamera {
   /** Yaw in radians; 0 looks north (towards -z), as the top-down rig. */
   yaw = 0;
   private yawTarget = 0;
-  pitch = THREE.MathUtils.degToRad(30);
-  distance = 1.6;
-  private distanceTarget = 1.6;
+  pitch = THREE.MathUtils.degToRad(40);
+  distance = 2.0;
+  private distanceTarget = 2.0;
   /** Sideways offset of the camera, in cells (positive: over the right shoulder). */
   shoulder = 0.22;
   /** Pulled back further on narrow (portrait) screens, where the hero would otherwise fill the view. */
@@ -83,12 +85,10 @@ export class ChaseCamera {
     // Right vector is forward turned 90° clockwise: (-f.y, f.x).
     const rx = -f.y;
     const rz = f.x;
-    this.camera.position.set(
-      this.focus.x - f.x * horiz + rx * this.shoulder,
-      this.focus.y + LOOK_HEIGHT + up,
-      this.focus.z - f.y * horiz + rz * this.shoulder,
-    );
-    _look.set(this.focus.x + rx * this.shoulder, this.focus.y + LOOK_HEIGHT, this.focus.z + rz * this.shoulder);
+    const lx = this.focus.x + f.x * LOOK_AHEAD + rx * this.shoulder;
+    const lz = this.focus.z + f.y * LOOK_AHEAD + rz * this.shoulder;
+    _look.set(lx, this.focus.y + LOOK_HEIGHT, lz);
+    this.camera.position.set(lx - f.x * horiz, this.focus.y + LOOK_HEIGHT + up, lz - f.y * horiz);
     this.camera.lookAt(_look);
   }
 

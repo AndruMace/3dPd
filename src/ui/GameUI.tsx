@@ -8,6 +8,7 @@ import { Game } from '../engine/Game';
 import { Inspect, type ExamineView } from '../engine/Inspect';
 import type { ItemSelectorMode, Prompt } from '../engine/core/ui';
 import type { Bag } from '../engine/items/bags';
+import { ActionButtons, Minimap, TargetFrame } from './actionHud';
 import { appendLog, GameLog, StatusPane, Toolbar, type LogEntry } from './hudParts';
 import type { Prefs } from '../platform/settings';
 import { Chrome, Img, ItemIcon, measureText, NinePatch, Text } from './pixel/components';
@@ -41,6 +42,8 @@ export interface GameNav {
 }
 
 const TOOLBAR_HEIGHT = 25;
+/** Touch screens get on-screen Attack/Run buttons; mouse and keyboard use click, F and Shift. */
+const TOUCH = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
 export function GameUI({
   game,
@@ -209,7 +212,12 @@ export function GameUI({
           onDanger={() => {}}
         />
       )}
-      <GameLog key={String(runKey === false ? 'dead' : 'run')} entries={log} width={uiW} bottom={TOOLBAR_HEIGHT} />
+      <GameLog
+        key={String(runKey === false ? 'dead' : 'run')}
+        entries={log}
+        width={state.action && TOUCH ? uiW - 74 : uiW}
+        bottom={TOOLBAR_HEIGHT}
+      />
       <Toolbar
         width={uiW}
         enabled={state.ready || state.examining}
@@ -224,8 +232,15 @@ export function GameUI({
         onQuickslot={() => game.quickslot()}
         onQuickslotLong={() => state.ready && push({ kind: 'bag', bag: null, mode: 'QUICKSLOT', purpose: 'quickslot' })}
       />
+      {state.action && (
+        <>
+          <Minimap game={game} top={36} />
+          {state.target && <TargetFrame target={state.target} />}
+          {state.ready && !state.prompt && TOUCH && <ActionButtons game={game} state={state} />}
+        </>
+      )}
       {state.action && state.interaction && state.ready && !state.prompt && (
-        <div class="interact-button" style={{ bottom: `${TOOLBAR_HEIGHT + 22}px` }}>
+        <div class="interact-button" style={{ bottom: `${TOOLBAR_HEIGHT + 42}px` }}>
           <RedButton
             label={state.interaction.kind === 'descend' ? 'Descend' : 'Ascend'}
             width={64}

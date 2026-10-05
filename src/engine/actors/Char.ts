@@ -20,6 +20,9 @@ export function isDoom(x: unknown): x is Doom {
   return !!x && typeof (x as Doom).onDeath === 'function';
 }
 
+/** Action mode: share of a blow that lands on a miss. */
+export const GRAZE = 0.25;
+
 export abstract class Char extends Actor {
   pos = 0;
   name = 'mob';
@@ -119,6 +122,21 @@ export abstract class Char extends Actor {
         }
       }
       return true;
+    } else if (Dungeon.realtime) {
+      // Action mode: a miss still grazes (a fraction of the blow, no special effects), so swings never whiff.
+      const dmg = Math.max(0, this.damageRoll() - Random.IntRange(0, enemy.dr()));
+      const graze = Math.round(dmg * GRAZE);
+      if (visibleFight) {
+        GLog.i(isHero ? `You graze ${enemy.name}` : `${this.name} grazes ${enemy.name}`);
+        Sample.play(Assets.SND_MISS, enemy.pos);
+      }
+      if (graze > 0) enemy.damage(graze, this);
+      else if (visibleFight) enemy.showStatus('neutral', enemy.defenseVerb());
+      if (!enemy.isAlive() && enemy === hero) {
+        Dungeon.fail(ResultDescriptions.MOB(indefinite(this.name), Dungeon.depth));
+        GLog.n(`${this.name} killed you...`);
+      }
+      return false;
     } else {
       if (visibleFight) {
         enemy.showStatus('neutral', enemy.defenseVerb());
@@ -327,7 +345,8 @@ export abstract class Char extends Actor {
       step = this.pos + NEIGHBOURS8[Random.Int(8)];
       if (!(level.passable[step] || level.avoid[step]) || Actor.findChar(step) !== null) return;
     }
-    if (level.map[this.pos] === Terrain.OPEN_DOOR) level.doorLeave(this.pos);
+    // In action mode doors follow whoever is near them (ActionGame), not cell-by-cell moves.
+    if (!Dungeon.realtime && level.map[this.pos] === Terrain.OPEN_DOOR) level.doorLeave(this.pos);
     const from = this.pos;
     this.pos = step;
     Events.emit({ type: 'move', id: this.id(), from, to: step });

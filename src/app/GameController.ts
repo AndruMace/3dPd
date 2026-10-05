@@ -8,6 +8,7 @@ import { Audio } from '../audio/Audio';
 import { Dungeon } from '../engine/Dungeon';
 import { Game, type SavedGame } from '../engine/Game';
 import type { HeroClass } from '../engine/actors/hero/Hero';
+import type { Mob } from '../engine/actors/mobs/Mob';
 import { Inspect, type ExamineView, type StatusView } from '../engine/Inspect';
 import type { GameEvent } from '../engine/core/events';
 import type { Prompt } from '../engine/core/ui';
@@ -56,6 +57,25 @@ export interface ViewState {
   action: boolean;
   /** Action mode: what the Interact button would do here (stairs), or null. */
   interaction: Interaction | null;
+  /** Action mode: the enemy being fought, for the target frame. */
+  target: { id: number; name: string; hp: number; ht: number } | null;
+  /** Action mode: sprinting right now. */
+  sprinting: boolean;
+  /** Action mode: the touch Sprint toggle is on. */
+  sprintToggle: boolean;
+}
+
+/** What the minimap draws: the level as the hero knows it, and where things are (in cells). */
+export interface MinimapView {
+  map: ArrayLike<number>;
+  visited: ArrayLike<number>;
+  mapped: ArrayLike<number>;
+  visible: ArrayLike<number>;
+  hero: { x: number; z: number; facing: number };
+  /** Camera yaw (0 looks north). */
+  yaw: number;
+  mobs: { x: number; z: number }[];
+  heaps: number[];
 }
 
 /** Action mode: characters are drawn this big relative to a cell (one cell is 3 m). */
@@ -101,6 +121,9 @@ export class GameController {
   /** Action mode is on for the current run. */
   private action = false;
   private actionAlpha = 1;
+  /** An enemy the player tapped or clicked, handed to the next world step. */
+  private pendingEngage: Mob | null = null;
+  private readonly targetRing: THREE.Mesh;
   private controls!: ActionControls;
   private readonly fog = new FogOfWar();
   private readonly uniforms: WorldUniforms;
@@ -137,6 +160,9 @@ export class GameController {
     flash: null,
     action: false,
     interaction: null,
+    target: null,
+    sprinting: false,
+    sprintToggle: false,
   };
   onState: (state: ViewState) => void = () => {};
   onLog: (text: string, kind: string) => void = () => {};
@@ -151,6 +177,11 @@ export class GameController {
 
     this.topRig = new CameraRig(1);
     this.chase = new ChaseCamera(1);
+    this.targetRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.16, 0.2, 24).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xffd040, transparent: true, opacity: 0.85, depthWrite: false }),
+    );
+    this.targetRing.visible = false;
     this.uniforms = createWorldUniforms(this.fog);
     this.scene.background = new THREE.Color(0x000000);
 
@@ -159,6 +190,7 @@ export class GameController {
     this.heroLight = new THREE.PointLight(0xffe2b0, 14, 10, 1.4);
     this.heroLight.position.set(0, 1.6, 0);
     this.scene.add(this.fx);
+    this.scene.add(this.targetRing);
 
     this.floating = new FloatingTextLayer(container);
     this.controls = new ActionControls(this.renderer.domElement, {
@@ -170,6 +202,7 @@ export class GameController {
         if (this.inputBlocked()) return;
         const cell = this.pickCell(x, y);
         if (cell !== -1 && Game.prompt?.kind === 'cell') this.tapCell(cell);
+        else if (this.action) this.pendingEngage = this.pickMob(x, y);
       },
       blocked: () => this.inputBlocked() || !this.canCommand(),
     });
@@ -411,6 +444,7 @@ export class GameController {
     if (this.action) this.stepAction(dt);
     this.playback(dt);
     if (this.action) this.syncBodies();
+    this.placeTargetRing();
 
     const heroView = this.chars.get(this.heroId);
     if (heroView) {
@@ -491,12 +525,28 @@ export class GameController {
       this.actionAlpha = 1;
     } else {
       const [mx, mz] = this.chase.stickToWorld(sx, sy);
-      this.actionAlpha = ActionGame.update(dt, { moveX: mx, moveZ: mz });
+      this.actionAlpha = ActionGame.update(dt, {
+        moveX: mx,
+        moveZ: mz,
+        attack: this.controls.attacking(),
+        sprint: this.controls.sprinting(),
+        engage: this.pendingEngage,
+      });
+      this.pendingEngage = null;
       this.enqueue();
       // On touch, the camera swings round behind the direction of travel unless the player is looking around.
       if (this.controls.touchMoving && this.controls.sinceLook > 1)
         this.chase.follow(mx, mz, 1.1 * Math.hypot(sx, sy), dt);
     }
+    const t = ActionGame.target;
+    const target = t ? { id: t.id(), name: t.name, hp: Math.max(0, t.HP), ht: t.HT } : null;
+    const cur = this.state.target;
+    if (
+      (target === null) !== (cur === null) ||
+      (target && cur && (target.id !== cur.id || target.hp !== cur.hp || target.ht !== cur.ht))
+    )
+      this.patch({ target });
+    if (ActionGame.sprinting !== this.state.sprinting) this.patch({ sprinting: ActionGame.sprinting });
     const interaction = ActionGame.interaction();
     if (interaction?.kind !== this.state.interaction?.kind || interaction?.cell !== this.state.interaction?.cell)
       this.patch({ interaction });
@@ -526,6 +576,78 @@ export class GameController {
         if (Math.abs(lateral) > 0.08) v.sprite.flipped = lateral < 0;
       }
     }
+  }
+
+  /** Action mode: the ring under the current target. */
+  private placeTargetRing(): void {
+    const t = this.action ? ActionGame.target : null;
+    const v = t ? this.chars.get(t.id()) : undefined;
+    this.targetRing.visible = !!v && v.visible;
+    if (v) {
+      this.targetRing.position.set(v.position.x, 0.02, v.position.z);
+      this.targetRing.scale.setScalar(1 + Math.sin(performance.now() / 160) * 0.06);
+    }
+  }
+
+  /** The enemy closest to where the player tapped/clicked (within about half a cell), if any. */
+  pickMob(clientX: number, clientY: number): Mob | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(ndc, this.rig.camera);
+    let best: Mob | null = null;
+    let bestD = 0.45;
+    for (const b of ActionGame.bodies().values()) {
+      const m = b.char;
+      if (m === Dungeon.hero || !Dungeon.visible[m.pos]) continue;
+      // Distance from the tap ray to the character's middle.
+      const d = this.raycaster.ray.distanceToPoint(_p.set(b.x, 0.25, b.z));
+      if (d < bestD) {
+        bestD = d;
+        best = m as Mob;
+      }
+    }
+    return best;
+  }
+
+  /** The minimap's view of the level (action mode). */
+  minimap(): MinimapView | null {
+    if (!this.action || !Dungeon.hero || !Dungeon.level) return null;
+    const level = Dungeon.level;
+    const bodies = ActionGame.bodies();
+    const hb = bodies.get(Dungeon.hero);
+    if (!hb) return null;
+    const mobs: { x: number; z: number }[] = [];
+    for (const b of bodies.values())
+      if (b.char !== Dungeon.hero && Dungeon.visible[b.char.pos]) mobs.push({ x: b.x, z: b.z });
+    const heaps: number[] = [];
+    for (const h of level.heaps.values()) if (level.visited[h.pos] || level.mapped[h.pos]) heaps.push(h.pos);
+    return {
+      map: level.map,
+      visited: level.visited,
+      mapped: level.mapped,
+      visible: Dungeon.visible,
+      hero: { x: hb.x, z: hb.z, facing: hb.facing },
+      yaw: this.chase.yaw,
+      mobs,
+      heaps,
+    };
+  }
+
+  /** On-screen Attack button (held) and Sprint toggle. */
+  setAttackButton(down: boolean): void {
+    this.controls.attackButton = down;
+  }
+
+  toggleSprint(): void {
+    this.controls.sprintToggle = !this.controls.sprintToggle;
+    this.patch({ sprintToggle: this.controls.sprintToggle });
+  }
+
+  get sprintToggled(): boolean {
+    return this.controls.sprintToggle;
   }
 
   /** Size a character view for the current mode. */
@@ -869,6 +991,12 @@ export class GameController {
       case 'resurrect':
         this.patch({ resurrect: true });
         return 0;
+      case 'windup': {
+        // Action mode: a mob is about to strike.
+        const v = this.chars.get(e.id!);
+        v?.telegraph(e.v ?? 0.4);
+        return 0;
+      }
       default:
         return 0;
     }
@@ -1108,3 +1236,4 @@ export class GameController {
 
 const _w = new THREE.Vector3();
 const _r = new THREE.Vector3();
+const _p = new THREE.Vector3();

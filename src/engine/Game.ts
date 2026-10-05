@@ -65,7 +65,12 @@ export const Game = {
    * Action mode (real time): characters are driven by `ActionGame`, so commands don't run the turn scheduler
    * afterwards and level switches don't hand the hero a turn.
    */
-  realtime: false,
+  get realtime(): boolean {
+    return Dungeon.realtime;
+  },
+  set realtime(on: boolean) {
+    Dungeon.realtime = on;
+  },
 
   newGame(config: RunConfig): void {
     Random.seed(config.seed);
