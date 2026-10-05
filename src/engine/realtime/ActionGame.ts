@@ -12,6 +12,7 @@ import { Hunger, Invisibility } from '../actors/buffs/buffs';
 import type { Mob } from '../actors/mobs/Mob';
 import { Events, GLog } from '../core/events';
 import { Sample } from '../core/fx';
+import { Random } from '../core/Random';
 import { UI } from '../core/ui';
 import { Item } from '../items/Item';
 import { Amulet } from '../items/misc';
@@ -107,7 +108,7 @@ function spawnBody(ch: Char): Body {
   const near = ch.realtimeSpawnNear ? bodies.get(ch.realtimeSpawnNear) : undefined;
   ch.realtimeSpawnNear = null;
   if (near && Dungeon.level) {
-    const a = Math.random() * Math.PI * 2;
+    const a = Random.Float(Math.PI * 2);
     const lvl = Dungeon.level;
     [b.x, b.z] = moveCircle(lvl.map, walk, near.x, near.z, b.radius, Math.cos(a) * 0.3, Math.sin(a) * 0.3);
     b.px = b.x;
