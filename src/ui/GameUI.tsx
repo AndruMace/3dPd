@@ -230,6 +230,15 @@ export function GameUI({
         onInfo={() => game.examine()}
         onInventory={() => state.ready && push({ kind: 'bag', bag: null, mode: 'ALL', purpose: 'inventory' })}
         onQuickslot={() => game.quickslot()}
+        onQuickslotDrag={state.action ? (dx, dy) => game.setAimPreview(game.dragToWorld(dx, dy)) : undefined}
+        onQuickslotDragEnd={
+          state.action
+            ? (dx, dy) => {
+                game.setAimPreview(null);
+                if (Math.hypot(dx, dy) > 14) game.quickslot(game.dragToWorld(dx, dy));
+              }
+            : undefined
+        }
         onQuickslotLong={() => state.ready && push({ kind: 'bag', bag: null, mode: 'QUICKSLOT', purpose: 'quickslot' })}
       />
       {state.action && (

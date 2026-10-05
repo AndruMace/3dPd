@@ -444,6 +444,10 @@ export class Bee extends NPC {
     }
     return super.act();
   }
+  realtimeTurn(): void {
+    this.HP--;
+    if (this.HP <= 0) this.die(null);
+  }
   protected chooseEnemy(): Char | null {
     return chooseHostileInView(this, this.enemy);
   }
@@ -555,6 +559,9 @@ export class Sheep extends NPC {
     return true;
   }
   damage(_dmg: number, _src: object): void {}
+  realtimeScheduled(): boolean {
+    return true;
+  }
   description(): string {
     return "This is a magic sheep. What's so magical about it? You can't kill it. It will stand there until it magcially fades away, all the while chewing cud with a blank stare.";
   }

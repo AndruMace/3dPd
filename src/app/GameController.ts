@@ -124,6 +124,7 @@ export class GameController {
   /** An enemy the player tapped or clicked, handed to the next world step. */
   private pendingEngage: Mob | null = null;
   private readonly targetRing: THREE.Mesh;
+  private readonly aimLine: THREE.Mesh;
   private controls!: ActionControls;
   private readonly fog = new FogOfWar();
   private readonly uniforms: WorldUniforms;
@@ -182,6 +183,12 @@ export class GameController {
       new THREE.MeshBasicMaterial({ color: 0xffd040, transparent: true, opacity: 0.85, depthWrite: false }),
     );
     this.targetRing.visible = false;
+    // A thin strip on the floor along the aimed direction (length in cells).
+    this.aimLine = new THREE.Mesh(
+      new THREE.PlaneGeometry(6, 0.06).rotateX(-Math.PI / 2).translate(3, 0, 0),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false }),
+    );
+    this.aimLine.visible = false;
     this.uniforms = createWorldUniforms(this.fog);
     this.scene.background = new THREE.Color(0x000000);
 
@@ -191,12 +198,15 @@ export class GameController {
     this.heroLight.position.set(0, 1.6, 0);
     this.scene.add(this.fx);
     this.scene.add(this.targetRing);
+    this.scene.add(this.aimLine);
 
     this.floating = new FloatingTextLayer(container);
     this.controls = new ActionControls(this.renderer.domElement, {
       rotateCamera: (r) => this.chase.rotateBy(r),
       zoomCamera: (f) => this.chase.zoomBy(f),
       interact: () => this.interact(),
+      quickslot: () => this.quickslot(this.mouseAim()),
+      search: () => this.search(),
       tap: (x, y) => {
         Audio.unlock();
         if (this.inputBlocked()) return;
@@ -372,6 +382,11 @@ export class GameController {
   }
 
   search(): void {
+    if (this.action) {
+      if (this.canCommand()) ActionGame.search();
+      this.enqueue();
+      return;
+    }
     if (!this.canCommand()) return;
     Game.search();
     this.enqueue();
@@ -387,11 +402,27 @@ export class GameController {
 
   itemAction(uid: number, action: string): void {
     if (!this.canCommand()) return;
+    if (this.action) {
+      const item = Game.findItem(uid);
+      if (item) ActionGame.useItem(item, action);
+      this.enqueue();
+      return;
+    }
     Game.itemAction(uid, action);
     this.enqueue();
   }
 
-  quickslot(): void {
+  /**
+   * The quickslot. In action mode it fires at once: at the target or best enemy ahead, or along `aim` (a world
+   * direction) when the player aimed by hand.
+   */
+  quickslot(aim: [number, number] | null = null): void {
+    if (this.action) {
+      if (!this.canCommand()) return;
+      ActionGame.useQuickslot(aim);
+      this.enqueue();
+      return;
+    }
     const p = Game.prompt;
     if (!(this.canCommand() || (p && p.kind === 'cell' && this.idle()))) return;
     Game.useQuickslot();
@@ -567,6 +598,9 @@ export class GameController {
       v.position.z = b.pz + (b.z - b.pz) * a;
       const speed = Math.hypot(b.vx, b.vz);
       v.setRunning(speed > 0.15);
+      // Resting: the hero sits down (squashed a little towards the floor).
+      const sit = b.char === Dungeon.hero && ActionGame.sitting;
+      v.sprite.scale.y += ((sit ? 0.78 : 1) - v.sprite.scale.y) * 0.2;
       v.sprite.billboard = !turn;
       if (turn) {
         v.sprite.flipped = false;
@@ -634,6 +668,36 @@ export class GameController {
       mobs,
       heaps,
     };
+  }
+
+  /** The direction from the hero to the ground under the mouse, if the mouse is over the view. */
+  private mouseAim(): [number, number] | null {
+    const m = this.controls.mouse;
+    if (!m || performance.now() - m.t > 4000) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((m.x - rect.left) / rect.width) * 2 - 1, -((m.y - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.rig.camera);
+    const hit = this.raycaster.ray.intersectPlane(this.ground, new THREE.Vector3());
+    const hb = Dungeon.hero && ActionGame.bodies().get(Dungeon.hero);
+    if (!hit || !hb) return null;
+    const dx = hit.x - hb.x;
+    const dz = hit.z - hb.z;
+    return Math.hypot(dx, dz) > 0.05 ? [dx, dz] : null;
+  }
+
+  /** A screen-space drag (CSS px, y down) as a world direction, relative to the camera. */
+  dragToWorld(dx: number, dy: number): [number, number] {
+    return this.chase.stickToWorld(dx, -dy);
+  }
+
+  /** Touch aiming from the quickslot: show the line while dragging, null to hide it. */
+  setAimPreview(dir: [number, number] | null): void {
+    this.aimLine.visible = !!dir && this.action;
+    if (!dir || !Dungeon.hero) return;
+    const hb = ActionGame.bodies().get(Dungeon.hero);
+    if (!hb) return;
+    this.aimLine.position.set(hb.x, 0.05, hb.z);
+    this.aimLine.rotation.y = Math.atan2(-dir[1], dir[0]);
   }
 
   /** On-screen Attack button (held) and Sprint toggle. */

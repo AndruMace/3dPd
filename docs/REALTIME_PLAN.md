@@ -215,6 +215,25 @@ Prototype both in phase 1 behind a debug toggle, then pick one by eye.
     the camera's view cone; tap it for a big map.
 - **Camera:** pitched to 40° and looking half a cell ahead, so enemies in front aren't hidden behind the hero.
 - **`npm run sim:action`:** a headless action-mode bot for crash fuzzing.
+- **Phase 3 (real-time systems): done.**
+  - Already running on the world clock: buffs, hunger, regeneration, gas, fire and webs (blobs), and plant
+    effects.
+  - Traps and plants go off only when you step near the middle of their cell (within about 1.2 m), so you can
+    skirt them. Known traps can be stepped on deliberately, as in PD.
+  - Water slows everyone to 70 %, except piranhas.
+  - Pushing into a chasm's edge asks PD's "jump in?" question.
+  - Search (Q or the Search tool) is a 1.5 s channel that moving cancels. Standing still also searches
+    passively once a second.
+  - After 2 s standing still with no enemy in sight, the hero sits down to rest for +0.35 HP/s.
+  - Throws and zaps never ask for a cell:
+    - From the quickslot or the bag, they go at the target or the best enemy ahead.
+    - Drag from the quickslot to aim by hand (with an aim line), or press 1 to aim at the mouse cursor.
+    - PD then resolves them as usual: Ballistica, hits, misses, dropping on the floor.
+  - Allies: bees and mirror images fight hostile mobs and otherwise follow the hero. Sheep time out on the world
+    clock. Piranhas still drown on land.
+  - The action bot now also uses items at random.
+
+## Phases
 
 ## Phases
 

@@ -626,6 +626,10 @@ export class Piranha extends Mob {
     this.HP = this.HT = 10 + Dungeon.depth * 5;
     this.defenseSkillValue = 10 + Dungeon.depth * 2;
   }
+  realtimeTurn(): void {
+    if (!Dungeon.level.water[this.pos]) this.die(null);
+  }
+
   protected act(): boolean {
     if (!Dungeon.level.water[this.pos]) {
       this.die(null);

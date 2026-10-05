@@ -42,6 +42,24 @@ export const Tuning = {
   /** Knockback on a hit, in cells per second of initial push (decays quickly). */
   KNOCKBACK: 1.6,
 
+  // ---- World ----
+  /** Speed multiplier wading through water. */
+  WATER_SLOW: 0.7,
+  /** Traps and plants go off when a body's centre comes this close to their cell's centre (about 1.2 m). */
+  TRIGGER_RADIUS: 0.4,
+  /** Pushing into a chasm's edge this long asks whether to jump. */
+  PIT_PUSH: 0.35,
+  /** Searching: standing still this long searches carefully (PD's intentional search). */
+  SEARCH_TIME: 1.5,
+  /** Standing still, the hero passively looks for secrets this often (PD did it every turn). */
+  PASSIVE_SEARCH: 1,
+  /** Standing still with no enemy in sight this long, the hero sits down to rest... */
+  SIT_AFTER: 2,
+  /** ...and regains this much extra health per second. */
+  SIT_REGEN: 0.35,
+  /** Thrown items and wands reach this far when aimed at nothing in particular. */
+  AIM_RANGE: 8,
+
   // ---- Mobs ----
   /** Mob walking speed at PD speed 1 (a bit slower than the hero, so you can break away). */
   MOB_SPEED: 1.45,

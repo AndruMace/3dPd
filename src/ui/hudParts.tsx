@@ -1,4 +1,5 @@
 // The in-game HUD, ported from ui/StatusPane, ui/Toolbar, ui/GameLog, ui/BuffIndicator and ui/DangerIndicator.
+import { useRef } from 'preact/hooks';
 import type { StatusView } from '../engine/Inspect';
 import { Img, ItemIcon, NinePatch, Chrome, Text } from './pixel/components';
 import { HERO_SHEETS, hex } from './pixel/widgets';
@@ -151,6 +152,8 @@ export function Toolbar({
   onQuickslotLong,
   infoActive,
   classicTools = true,
+  onQuickslotDrag,
+  onQuickslotDragEnd,
 }: {
   width: number;
   enabled: boolean;
@@ -163,8 +166,11 @@ export function Toolbar({
   onQuickslot: () => void;
   onQuickslotLong: () => void;
   infoActive: boolean;
-  /** Wait, search and examine: turn-based tools, hidden in action mode. */
+  /** Wait and examine: turn-based tools, hidden in action mode (search stays). */
   classicTools?: boolean;
+  /** Action mode: drag from the quickslot to aim it (CSS px from the press); a long press still picks the item. */
+  onQuickslotDrag?: (dx: number, dy: number) => void;
+  onQuickslotDragEnd?: (dx: number, dy: number) => void;
 }) {
   const tool = (
     x: number,
@@ -181,24 +187,28 @@ export function Toolbar({
   return (
     <div class="toolbar" style={{ width: `${width}px` }}>
       {classicTools && tool(0, 20, 0, onWait, onRest)}
-      {classicTools && tool(20, 20, 20, onSearch)}
+      {tool(20, 20, classicTools ? 20 : 0, onSearch)}
       {classicTools && tool(40, 21, 40, onInfo, undefined, infoActive ? <div class="tool-active" /> : null)}
       {tool(60, 23, width - 22 - 23, onInventory)}
-      {tool(
-        83,
-        22,
-        width - 22,
-        onQuickslot,
-        onQuickslotLong,
-        quickslot && (
+      <Tool
+        x={83}
+        w={22}
+        left={width - 22}
+        enabled={enabled}
+        onClick={onQuickslot}
+        onLong={onQuickslotLong}
+        onDrag={onQuickslotDrag}
+        onDragEnd={onQuickslotDragEnd}
+      >
+        {quickslot && (
           <div class="quickslot" style={{ opacity: quickslot.enabled ? 1 : 0.3 }}>
             <ItemIcon image={quickslot.image} style={{ position: 'absolute', left: '2px', top: '4px' }} />
             {quickslot.status && (
               <Text text={quickslot.status} size={6} style={{ position: 'absolute', left: '1px', top: '2px' }} />
             )}
           </div>
-        ),
-      )}
+        )}
+      </Tool>
     </div>
   );
 }
@@ -210,6 +220,8 @@ function Tool({
   enabled,
   onClick,
   onLong,
+  onDrag,
+  onDragEnd,
   children,
 }: {
   x: number;
@@ -218,27 +230,59 @@ function Tool({
   enabled: boolean;
   onClick: () => void;
   onLong?: () => void;
+  /** Dragging away from the tool (CSS px from where the press started), e.g. to aim the quickslot. */
+  onDrag?: (dx: number, dy: number) => void;
+  onDragEnd?: (dx: number, dy: number) => void;
   children?: preact.ComponentChildren;
 }) {
-  let timer = 0;
-  let longFired = false;
+  const press = useRef({ timer: 0, longFired: false, x: 0, y: 0, dragging: false, down: false });
+  const DRAG = 14;
   return (
     <div
       class={`tool ${enabled ? '' : 'disabled'}`}
       style={{ left: `${left}px`, width: `${w}px`, height: '25px' }}
-      onPointerDown={() => {
-        longFired = false;
+      onPointerDown={(e) => {
+        const p = press.current;
+        p.longFired = false;
+        p.dragging = false;
+        p.down = true;
+        p.x = e.clientX;
+        p.y = e.clientY;
+        if (onDrag) (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
         if (onLong)
-          timer = window.setTimeout(() => {
-            longFired = true;
+          p.timer = window.setTimeout(() => {
+            p.longFired = true;
             onLong();
           }, 500);
       }}
-      onPointerUp={() => {
-        clearTimeout(timer);
-        if (!longFired) onClick();
+      onPointerMove={(e) => {
+        const p = press.current;
+        if (!p.down || !onDrag) return;
+        const dx = e.clientX - p.x;
+        const dy = e.clientY - p.y;
+        if (!p.dragging && Math.hypot(dx, dy) > DRAG) {
+          p.dragging = true;
+          clearTimeout(p.timer);
+        }
+        if (p.dragging) onDrag(dx, dy);
       }}
-      onPointerLeave={() => clearTimeout(timer)}
+      onPointerUp={(e) => {
+        const p = press.current;
+        clearTimeout(p.timer);
+        if (!p.down) return;
+        p.down = false;
+        if (p.dragging) onDragEnd?.(e.clientX - p.x, e.clientY - p.y);
+        else if (!p.longFired) onClick();
+      }}
+      onPointerCancel={() => {
+        const p = press.current;
+        clearTimeout(p.timer);
+        if (p.dragging) onDragEnd?.(0, 0);
+        p.down = p.dragging = false;
+      }}
+      onPointerLeave={() => {
+        if (!press.current.dragging) clearTimeout(press.current.timer);
+      }}
     >
       <Img src="toolbar.png" x={x} y={7} w={w} h={25} />
       {children}

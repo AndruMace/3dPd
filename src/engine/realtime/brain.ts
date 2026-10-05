@@ -8,6 +8,7 @@ import type { Mob } from '../actors/mobs/Mob';
 import { Events } from '../core/events';
 import { Random } from '../core/Random';
 import { distance, WIDTH } from '../levels/constants';
+import { Ballistica } from '../mechanics/Ballistica';
 import type { Body } from './ActionGame';
 import { Tuning } from './tuning';
 
@@ -27,8 +28,10 @@ interface MobInternals {
   state: Mob['state'];
   enemySeen: boolean;
   target: number;
+  enemy: Char | null;
   attackDelay(): number;
   notice(): void;
+  chooseEnemy(): Char | null;
 }
 
 const minds = new WeakMap<Mob, Mind>();
@@ -89,15 +92,34 @@ function walkTo(mob: Mob, body: Body, mind: Mind, targetCell: number, speed: num
   return steer(body, wx, wz, speed);
 }
 
+/** Can `a` see `b`? The hero's field of view for anything involving the hero, a line of sight otherwise. */
+function canSee(a: Char, b: Char): boolean {
+  const hero = Dungeon.hero;
+  if (!b.isAlive() || b.invisible > 0) return false;
+  if (a === hero) return !!Dungeon.visible[b.pos];
+  if (b === hero) return !!Dungeon.visible[a.pos];
+  return distance(a.pos, b.pos) <= 8 && Ballistica.cast(a.pos, b.pos, false, true) === b.pos;
+}
+
 /**
  * One step of a mob's real-time behaviour. Returns the velocity it wants; the caller moves the body (with
- * collisions) and keeps `mob.pos` on the cell under it.
+ * collisions) and keeps `mob.pos` on the cell under it. The mob fights whoever PD's chooseEnemy() picks: the hero
+ * for most, other mobs for allies (bees, mirror images) and for the amok.
  */
-export function thinkMob(mob: Mob, body: Body, heroBody: Body, dt: number): [number, number] {
+export function thinkMob(mob: Mob, body: Body, bodyOf: (ch: Char) => Body | undefined, dt: number): [number, number] {
   const ai = mob as unknown as MobInternals;
   const mind = mindOf(mob);
   const hero = Dungeon.hero;
   mind.cooldown = Math.max(0, mind.cooldown - dt);
+  if (mob.realtimeScheduled()) return [0, 0];
+
+  mind.turn -= dt;
+  const turnTick = mind.turn <= 0;
+  if (turnTick) {
+    mind.turn += Tuning.TURN;
+    mob.realtimeTurn();
+    if (!mob.isAlive()) return [0, 0];
+  }
 
   if (mob.paralysed) {
     mind.windup = 0;
@@ -105,35 +127,50 @@ export function thinkMob(mob: Mob, body: Body, heroBody: Body, dt: number): [num
     return [0, 0];
   }
 
-  const dist = Math.hypot(heroBody.x - body.x, heroBody.z - body.z);
+  const ally = !mob.hostile;
+  const foe = ai.chooseEnemy();
+  ai.enemy = foe;
+  const foeBody = foe ? bodyOf(foe) : undefined;
+  const dist = foeBody ? Math.hypot(foeBody.x - body.x, foeBody.z - body.z) : Infinity;
   const reach = Tuning.MELEE_REACH;
 
-  // A blow being wound up lands (or misses the spot) when the wind-up ends, wherever the hero is by then.
+  // A blow being wound up lands (or misses the spot) when the wind-up ends, wherever the foe is by then.
   if (mind.windup > 0) {
-    body.facing = Math.atan2(heroBody.z - body.z, heroBody.x - body.x);
+    if (foeBody) body.facing = Math.atan2(foeBody.z - body.z, foeBody.x - body.x);
     mind.windup -= dt;
     if (mind.windup <= 0) {
       mind.windup = 0;
       mind.cooldown = ai.attackDelay() * Tuning.TURN;
-      if (hero.isAlive() && dist <= reach + Tuning.REACH_SLACK && !mob.isCharmedBy(hero)) mob.attack(hero);
+      if (foe && foe.isAlive() && dist <= reach + Tuning.REACH_SLACK && !mob.isCharmedBy(foe)) mob.attack(foe);
     }
     return [0, 0];
   }
 
-  const sees = hero.isAlive() && hero.invisible <= 0 && !!Dungeon.visible[mob.pos];
-  mind.turn -= dt;
-  const turnTick = mind.turn <= 0;
-  if (turnTick) mind.turn += Tuning.TURN;
+  const sees = !!foe && !!foeBody && canSee(mob, foe);
   const speed = mobSpeed(mob);
-  const cellDist = distance(mob.pos, hero.pos);
+  const cellDist = foe ? distance(mob.pos, foe.pos) : Infinity;
+  // PD's noticing roll: stealth only matters against the hero.
+  const noticeRoll = (range: number) =>
+    foe === hero ? Random.Int(range + hero.stealth() + (hero.flying ? 2 : 0)) === 0 : true;
+
+  // Allies with nobody to fight stay with the hero.
+  if (ally && !(sees && foe)) {
+    ai.state = 'WANDERING';
+    const hb = bodyOf(hero);
+    if (!hb) return [0, 0];
+    const dh = Math.hypot(hb.x - body.x, hb.z - body.z);
+    if (dh < 0.9) return [0, 0];
+    if (distance(mob.pos, hero.pos) <= 1) return steer(body, hb.x, hb.z, speed);
+    return walkTo(mob, body, mind, hero.pos, speed);
+  }
 
   switch (ai.state) {
     case 'SLEEPING':
-      if (turnTick && sees && Random.Int(cellDist + hero.stealth() + (hero.flying ? 2 : 0)) === 0) {
+      if (turnTick && sees && foe && noticeRoll(cellDist)) {
         ai.enemySeen = true;
         ai.notice();
         ai.state = 'HUNTING';
-        ai.target = hero.pos;
+        ai.target = foe.pos;
         mind.turn = Tuning.TURN; // TIME_TO_WAKE_UP
       } else if (turnTick) {
         ai.enemySeen = false;
@@ -141,11 +178,11 @@ export function thinkMob(mob: Mob, body: Body, heroBody: Body, dt: number): [num
       return [0, 0];
 
     case 'WANDERING':
-      if (turnTick && sees && Random.Int(Math.trunc(cellDist / 2) + hero.stealth()) === 0) {
+      if (sees && foe && (ally || (turnTick && noticeRoll(Math.trunc(cellDist / 2))))) {
         ai.enemySeen = true;
         ai.notice();
         ai.state = 'HUNTING';
-        ai.target = hero.pos;
+        ai.target = foe.pos;
         return [0, 0];
       }
       if (ai.target === -1 || ai.target === mob.pos) ai.target = Dungeon.level.randomDestination();
@@ -153,25 +190,25 @@ export function thinkMob(mob: Mob, body: Body, heroBody: Body, dt: number): [num
 
     case 'HUNTING': {
       ai.enemySeen = sees;
-      if (sees) ai.target = hero.pos;
-      if (sees && dist <= reach) {
-        if (mind.cooldown <= 0 && !mob.isCharmedBy(hero)) {
+      if (sees && foe) ai.target = foe.pos;
+      if (sees && foe && foeBody && dist <= reach) {
+        if (mind.cooldown <= 0 && !mob.isCharmedBy(foe)) {
           mind.windup = windupOf(mob);
-          body.facing = Math.atan2(heroBody.z - body.z, heroBody.x - body.x);
-          Events.emit({ type: 'attack', id: mob.id(), target: hero.pos });
+          body.facing = Math.atan2(foeBody.z - body.z, foeBody.x - body.x);
+          Events.emit({ type: 'attack', id: mob.id(), target: foe.pos });
           Events.emit({ type: 'fx', fx: 'windup', id: mob.id(), v: mind.windup });
         }
         return [0, 0];
       }
-      // Close by and in sight: go straight for the hero (paths only matter around corners). Swimmers only if
-      // the hero is in the water too.
-      if (sees && cellDist <= 1 && walkable(mob)[hero.pos]) {
+      // Close by and in sight: go straight for the foe (paths only matter around corners). Swimmers only if the
+      // foe is in the water too.
+      if (sees && foe && foeBody && cellDist <= 1 && walkable(mob)[foe.pos]) {
         mind.waypoint = -1;
         const stop = reach * 0.85;
         const k = Math.max(0, (dist - stop) / Math.max(dist, 1e-6));
-        return steer(body, body.x + (heroBody.x - body.x) * k, body.z + (heroBody.z - body.z) * k, speed);
+        return steer(body, body.x + (foeBody.x - body.x) * k, body.z + (foeBody.z - body.z) * k, speed);
       }
-      if (ai.target === mob.pos) {
+      if (ai.target === -1 || ai.target === mob.pos) {
         // Lost the trail: back to wandering, as PD does when a hunt leads nowhere.
         ai.state = 'WANDERING';
         ai.target = Dungeon.level.randomDestination();
@@ -182,9 +219,9 @@ export function thinkMob(mob: Mob, body: Body, heroBody: Body, dt: number): [num
 
     case 'FLEEING': {
       ai.enemySeen = sees;
-      if (sees) ai.target = hero.pos;
+      if (sees && foe) ai.target = foe.pos;
       if (mind.waypoint === -1 || mind.waypoint === mob.pos) {
-        mind.waypoint = flee(mob, mob.pos, ai.target, walkable(mob), Dungeon.visible);
+        mind.waypoint = ai.target === -1 ? -1 : flee(mob, mob.pos, ai.target, walkable(mob), Dungeon.visible);
       }
       if (mind.waypoint === -1) return [0, 0];
       const [wx, wz] = centre(mind.waypoint);

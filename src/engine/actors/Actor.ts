@@ -154,7 +154,7 @@ export abstract class Actor implements Bundlable {
       let next: Actor | null = null;
       let t = Infinity;
       for (const actor of all) {
-        if (!actor.isChar() && actor.time < t) {
+        if ((!actor.isChar() || actor.realtimeScheduled()) && actor.time < t) {
           t = actor.time;
           next = actor;
         }

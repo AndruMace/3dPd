@@ -194,3 +194,132 @@ describe('Action mode combat', () => {
     ActionGame.enable(false);
   });
 });
+
+describe('Action mode systems', () => {
+  async function fresh(seed: number) {
+    ActionGame.enable(true);
+    Game.newGame({ seed, heroClass: 'WARRIOR' });
+    if (Game.prompt) Game.answer(null);
+    Game.drainEvents();
+    for (const m of [...Dungeon.level.mobs]) Dungeon.level.mobs.delete(m);
+    return Dungeon.hero;
+  }
+  const idle = (n: number, extra: object = {}) => {
+    for (let i = 0; i < n; i++) ActionGame.update(Tuning.STEP, { moveX: 0, moveZ: 0, ...extra });
+  };
+
+  it('throws darts from the quickslot at the nearest enemy without asking for a cell', async () => {
+    const hero = await fresh(21);
+    const { Rat } = await import('../src/engine/actors/mobs/mobs');
+    const { Actor } = await import('../src/engine/actors/Actor');
+    const level = Dungeon.level;
+    const { distance } = await import('../src/engine/levels/constants');
+    let cell = -1;
+    for (let c = 0; c < level.map.length && cell === -1; c++) {
+      if (level.passable[c] && Dungeon.visible[c] && distance(c, hero.pos) >= 2 && distance(c, hero.pos) <= 4) cell = c;
+    }
+    expect(cell).not.toBe(-1);
+    const rat = new Rat();
+    rat.pos = cell;
+    rat.state = 'SLEEPING';
+    level.mobs.add(rat);
+    Actor.add(rat);
+    idle(1);
+    const darts = () => Game.quickslotItem()?.quantity ?? 0;
+    const before = darts();
+    ActionGame.useQuickslot();
+    expect(Game.prompt).toBeNull();
+    expect(darts()).toBe(before - 1);
+    const thrown = Game.drainEvents().find((e) => e.type === 'missile');
+    expect(thrown && thrown.type === 'missile' && thrown.to).toBe(cell);
+    ActionGame.enable(false);
+  });
+
+  it('sets traps off only near the middle of their cell', async () => {
+    const hero = await fresh(22);
+    const level = Dungeon.level;
+    // Put a visible paralytic trap next to the hero, then walk along its edge, then through its middle.
+    const W = WIDTH;
+    const dir = [1, -1, W, -W].find((d) => level.passable[hero.pos + d] && level.passable[hero.pos + 2 * d])!;
+    const trapCell = hero.pos + dir;
+    level.set(trapCell, Terrain.PARALYTIC_TRAP);
+    const hb = ActionGame.bodies().get(hero)!;
+    const tx = (trapCell % W) + 0.5;
+    const tz = Math.floor(trapCell / W) + 0.5;
+    const ux = dir === 1 ? 1 : dir === -1 ? -1 : 0;
+    const uz = dir === W ? 1 : dir === -W ? -1 : 0;
+    // Walk in until just across the trap cell's edge (0.45 from its middle): inside the cell, not triggered.
+    for (let i = 0; i < 200 && Math.hypot(hb.x - tx, hb.z - tz) > 0.45; i++) {
+      ActionGame.update(Tuning.STEP, { moveX: ux * 0.15, moveZ: uz * 0.15 });
+    }
+    idle(10);
+    expect(hero.pos).toBe(trapCell);
+    expect(level.map[trapCell]).toBe(Terrain.PARALYTIC_TRAP);
+    // Step on to the middle: it goes off (and becomes an inactive trap).
+    for (let i = 0; i < 100 && Math.hypot(hb.x - tx, hb.z - tz) > 0.1; i++) {
+      ActionGame.update(Tuning.STEP, { moveX: ux * 0.3, moveZ: uz * 0.3 });
+    }
+    expect(level.map[trapCell]).not.toBe(Terrain.PARALYTIC_TRAP);
+    ActionGame.enable(false);
+  });
+
+  it('searches carefully when asked, and rests when standing still', async () => {
+    const hero = await fresh(23);
+    hero.HP = 5;
+    const events: string[] = [];
+    ActionGame.search();
+    for (let i = 0; i < Math.ceil(Tuning.SEARCH_TIME / Tuning.STEP) + 2; i++) {
+      ActionGame.update(Tuning.STEP, { moveX: 0, moveZ: 0 });
+      for (const e of Game.drainEvents()) if (e.type === 'fx') events.push(e.fx);
+    }
+    expect(events).toContain('checkedCell');
+    idle(Math.round((Tuning.SIT_AFTER + 6) / Tuning.STEP));
+    expect(ActionGame.sitting).toBe(true);
+    expect(hero.HP).toBeGreaterThan(5);
+    // Moving stands the hero up.
+    ActionGame.update(Tuning.STEP * 3, { moveX: 1, moveZ: 0 });
+    ActionGame.update(Tuning.STEP * 3, { moveX: 0, moveZ: 1 });
+    expect(ActionGame.sitting).toBe(false);
+    ActionGame.enable(false);
+  });
+
+  it('wading through water is slower', async () => {
+    const hero = await fresh(24);
+    const level = Dungeon.level;
+    const hb = ActionGame.bodies().get(hero)!;
+    const run = () => {
+      const x0 = hb.x;
+      const z0 = hb.z;
+      // Back and forth so walls don't get in the way.
+      let d = 0;
+      for (let i = 0; i < 20; i++) {
+        const px = hb.x;
+        const pz = hb.z;
+        ActionGame.update(Tuning.STEP, { moveX: i < 10 ? 1 : -1, moveZ: 0 });
+        d += Math.hypot(hb.x - px, hb.z - pz);
+      }
+      hb.x = x0;
+      hb.z = z0;
+      return d;
+    };
+    const dry = run();
+    for (let c = 0; c < level.map.length; c++) level.water[c] = 1;
+    const wet = run();
+    expect(wet).toBeLessThan(dry * 0.85);
+    ActionGame.enable(false);
+  });
+
+  it("lets the flock's sheep time out on the world clock", async () => {
+    const hero = await fresh(25);
+    const { Sheep } = await import('../src/engine/actors/mobs/npcs');
+    const { Actor } = await import('../src/engine/actors/Actor');
+    const sheep = new Sheep();
+    sheep.lifespan = 4;
+    sheep.pos = [1, -1, WIDTH, -WIDTH].map((d) => hero.pos + d).find((c) => Dungeon.level.passable[c])!;
+    Dungeon.level.mobs.add(sheep);
+    Actor.add(sheep);
+    idle(Math.round((10 * Tuning.TURN) / Tuning.STEP));
+    expect(Dungeon.level.mobs.has(sheep)).toBe(false);
+    ActionGame.enable(false);
+  });
+});

@@ -1,5 +1,5 @@
 // Action mode input. Keyboard: WASD/arrows to move, Shift to sprint, F/J to attack, E/Space/Enter to interact,
-// Z/C to turn the camera. Mouse: click an enemy to fight it, drag to turn the camera, wheel to zoom. Touch: a floating joystick on the left half of the screen, drag on
+// 1 for the quickslot (aimed at the mouse), Q to search, Z/C to turn the camera. Mouse: click an enemy to fight it, drag to turn the camera, wheel to zoom. Touch: a floating joystick on the left half of the screen, drag on
 // the right half to look around. Taps (no drag) are passed on, e.g. to answer cell prompts.
 
 const JOYSTICK_RADIUS = 56; // CSS px
@@ -8,6 +8,10 @@ const LOOK_SPEED = Math.PI / 400; // radians per CSS px dragged
 
 export interface ControlsHost {
   rotateCamera(radians: number): void;
+  /** The quickslot key (1): aimed at the mouse cursor when it's over the view. */
+  quickslot(): void;
+  /** The search key (Q). */
+  search(): void;
   zoomCamera(factor: number): void;
   interact(): void;
   tap(clientX: number, clientY: number): void;
@@ -41,6 +45,8 @@ export class ActionControls {
   attackButton = false;
   /** The on-screen Sprint toggle. */
   sprintToggle = false;
+  /** Where the mouse last was over the view (client coordinates), and when. */
+  mouse: { x: number; y: number; t: number } | null = null;
 
   constructor(
     private readonly el: HTMLElement,
@@ -55,6 +61,9 @@ export class ActionControls {
 
     el.addEventListener('pointerdown', (e) => this.down(e));
     el.addEventListener('pointermove', (e) => this.move(e));
+    el.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'mouse') this.mouse = null;
+    });
     el.addEventListener('pointerup', (e) => this.up(e));
     el.addEventListener('pointercancel', (e) => this.up(e));
     el.addEventListener('wheel', (e) => {
@@ -70,7 +79,10 @@ export class ActionControls {
       // stick() and attacking() ignore them while play is blocked.
       this.keys.add(e.code);
       if (this.host.blocked()) return;
-      if (!e.repeat && (e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter')) this.host.interact();
+      if (e.repeat) return;
+      if (e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter') this.host.interact();
+      else if (e.code === 'Digit1') this.host.quickslot();
+      else if (e.code === 'KeyQ') this.host.search();
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
@@ -139,6 +151,7 @@ export class ActionControls {
   }
 
   private move(e: PointerEvent): void {
+    if (e.pointerType === 'mouse') this.mouse = { x: e.clientX, y: e.clientY, t: performance.now() };
     const p = this.pointers.get(e.pointerId);
     if (!p) return;
     const dx = e.clientX - p.x;

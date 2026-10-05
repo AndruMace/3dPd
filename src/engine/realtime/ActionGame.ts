@@ -13,7 +13,9 @@ import type { Mob } from '../actors/mobs/Mob';
 import { Events, GLog } from '../core/events';
 import { Sample } from '../core/fx';
 import { UI } from '../core/ui';
+import { Item } from '../items/Item';
 import { Amulet } from '../items/misc';
+import { Chasm } from '../levels/features';
 import type { Level } from '../levels/Level';
 import { Terrain as T } from '../levels/Terrain';
 import { WIDTH } from '../levels/constants';
@@ -72,6 +74,23 @@ let heroCooldown = 0;
 let hitstop = 0;
 let sprinting = false;
 
+// Standing still: searching, resting.
+let still = 0;
+let passiveSearch = 0;
+let searching = 0;
+let sitting = false;
+let sitHeal = 0;
+/** A trap or plant cell the hero has entered but not yet stepped near the middle of. */
+let pendingPress = -1;
+let pitPush = 0;
+
+/** Terrain that is a trap (visible or hidden): set off near the cell's middle, not at its edge. */
+const TRAPS = new Set<number>(
+  Object.entries(T)
+    .filter(([k, v]) => k.includes('TRAP') && typeof v === 'number')
+    .map(([, v]) => v as number),
+);
+
 function makeBody(ch: Char): Body {
   const x = (ch.pos % WIDTH) + 0.5;
   const z = Math.floor(ch.pos / WIDTH) + 0.5;
@@ -106,10 +125,100 @@ function heroEnters(cell: number): void {
   const lvl = Dungeon.level;
   hero.pos = cell;
   if (!hero.flying && lvl.water[cell]) Sample.play(Assets.SND_WATER);
-  if (!hero.flying) lvl.press(cell, hero);
+  pendingPress = -1;
+  if (!hero.flying) {
+    // Traps and plants wait until the hero steps near the middle of the cell (see pressPending).
+    if (TRAPS.has(lvl.map[cell]) || lvl.plants.has(cell)) pendingPress = cell;
+    else lvl.press(cell, hero);
+  }
   observe();
   hero.search(false);
   autoPickUp();
+}
+
+/** A trap or plant under the hero goes off once the hero's centre comes near the middle of its cell. */
+function pressPending(hb: Body): void {
+  const hero = Dungeon.hero;
+  if (pendingPress === -1 || pendingPress !== hero.pos) return;
+  const cx = (pendingPress % WIDTH) + 0.5;
+  const cz = Math.floor(pendingPress / WIDTH) + 0.5;
+  if (Math.hypot(hb.x - cx, hb.z - cz) > Tuning.TRIGGER_RADIUS) return;
+  const cell = pendingPress;
+  pendingPress = -1;
+  Dungeon.level.press(cell, hero);
+}
+
+/** Pushing into a chasm's edge for a moment asks (as PD's Chasm.heroJump does) whether to jump in. */
+function checkPit(hb: Body, mx: number, mz: number, dt: number): void {
+  const len = Math.hypot(mx, mz);
+  const lvl = Dungeon.level;
+  if (len < 0.3) {
+    pitPush = 0;
+    return;
+  }
+  const ahead = cellOf(hb.x + (mx / len) * (hb.radius + 0.08), hb.z + (mz / len) * (hb.radius + 0.08));
+  if (!lvl.pit[ahead]) {
+    pitPush = 0;
+    return;
+  }
+  pitPush += dt;
+  if (pitPush < Tuning.PIT_PUSH) return;
+  pitPush = 0;
+  const hero = Dungeon.hero;
+  UI.options(
+    'Chasm',
+    'Do you really want to jump into the chasm? You can probably die.',
+    ["Yes, I know what I'm doing", 'No, I changed my mind'],
+    (index) => {
+      if (index !== 0) return;
+      hero.pos = ahead;
+      Chasm.heroFall(ahead);
+    },
+  );
+}
+
+/** Thrown items and wands go at the target (or the best enemy ahead), or along `dir` when aimed by hand. */
+function aimCell(dir: [number, number] | null): number {
+  const hero = Dungeon.hero;
+  const hb = bodies.get(hero)!;
+  if (!dir) {
+    const t = fightable(target) ? target : bestTarget(hb);
+    if (t) {
+      hb.facing = Math.atan2(bodies.get(t)!.z - hb.z, bodies.get(t)!.x - hb.x);
+      return t.pos;
+    }
+    dir = [Math.cos(hb.facing), Math.sin(hb.facing)];
+  }
+  const len = Math.hypot(dir[0], dir[1]) || 1;
+  const dx = dir[0] / len;
+  const dz = dir[1] / len;
+  hb.facing = Math.atan2(dz, dx);
+  // An enemy close to the aimed line is what the player meant.
+  let best: Mob | null = null;
+  let bestScore = 0.6;
+  for (const m of Dungeon.level.mobs) {
+    if (!fightable(m)) continue;
+    const b = bodies.get(m)!;
+    const ox = b.x - hb.x;
+    const oz = b.z - hb.z;
+    const along = ox * dx + oz * dz;
+    if (along <= 0 || along > Tuning.AIM_RANGE) continue;
+    const off = Math.abs(ox * dz - oz * dx);
+    if (off < bestScore) {
+      bestScore = off;
+      best = m;
+    }
+  }
+  if (best) return best.pos;
+  // Otherwise as far as the line goes before a wall.
+  const lvl = Dungeon.level;
+  let last = hero.pos;
+  for (let d = 0.25; d <= Tuning.AIM_RANGE; d += 0.25) {
+    const c = cellOf(hb.x + dx * d, hb.z + dz * d);
+    if (!lvl.passable[c] && !lvl.pit[c] && !lvl.avoid[c]) break;
+    last = c;
+  }
+  return last;
 }
 
 /** Walking over items picks them up (as many as fit). Chests and other heap types need Interact. */
@@ -179,11 +288,21 @@ function bestTarget(hb: Body): Mob | null {
   return best;
 }
 
+/**
+ * Where bodies can stand: PD's passable cells plus "avoid" cells (known traps, which PD lets you step on on
+ * purpose), but not chasms (jumping in asks first).
+ */
+const walk = new Uint8Array(WIDTH * WIDTH);
+function updateWalk(): void {
+  const lvl = Dungeon.level;
+  for (let i = 0; i < walk.length; i++) walk[i] = lvl.passable[i] || (lvl.avoid[i] && !lvl.pit[i]) ? 1 : 0;
+}
+
 /** Moves a body with its intended velocity plus knockback, sliding along walls. */
 function moveBody(b: Body, vx: number, vz: number, dt: number): number {
   const lvl = Dungeon.level;
   const k = Math.exp(-12 * dt);
-  const [nx, nz] = moveCircle(lvl.map, lvl.passable, b.x, b.z, b.radius, (vx + b.kx) * dt, (vz + b.kz) * dt);
+  const [nx, nz] = moveCircle(lvl.map, walk, b.x, b.z, b.radius, (vx + b.kx) * dt, (vz + b.kz) * dt);
   b.kx *= k;
   b.kz *= k;
   const moved = Math.hypot(nx - b.x, nz - b.z);
@@ -217,7 +336,7 @@ function separate(): void {
       b.z += nz * push * (1 - wa);
     }
   }
-  for (const b of list) [b.x, b.z] = moveCircle(lvl.map, lvl.passable, b.x, b.z, b.radius, 0, 0);
+  for (const b of list) [b.x, b.z] = moveCircle(lvl.map, walk, b.x, b.z, b.radius, 0, 0);
 }
 
 /** The hero's blow lands at the impact frame (if the target is still in reach). */
@@ -244,8 +363,52 @@ function heroStrike(hb: Body): void {
   }
 }
 
+/** Standing still: passive searching, the search channel, and sitting down to rest when it's safe. */
+function restAndSearch(moved: number, dt: number): void {
+  const hero = Dungeon.hero;
+  if (moved > 0.002 || swing > 0) {
+    still = 0;
+    passiveSearch = 0;
+    if (searching > 0) {
+      searching = 0;
+      GLog.i('You stop searching');
+    }
+    if (sitting) sitting = false;
+    return;
+  }
+  still += dt;
+  passiveSearch += dt;
+  if (passiveSearch >= Tuning.PASSIVE_SEARCH) {
+    passiveSearch = 0;
+    hero.search(false);
+  }
+  if (searching > 0) {
+    searching -= dt;
+    if (searching <= 0) {
+      searching = 0;
+      hero.search(true);
+    }
+  }
+  const danger = [...Dungeon.level.mobs].some((m) => m.hostile && Dungeon.visible[m.pos]);
+  const canSit = still >= Tuning.SIT_AFTER && !danger && hero.HP < hero.HT && !hero.buff(Hunger)?.isStarving();
+  if (canSit && !sitting) {
+    sitting = true;
+    hero.showStatus('default', 'resting');
+  } else if (!canSit && sitting) {
+    sitting = false;
+  }
+  if (sitting) {
+    sitHeal += Tuning.SIT_REGEN * dt;
+    if (sitHeal >= 1) {
+      sitHeal -= 1;
+      hero.heal(1);
+    }
+  }
+}
+
 function tick(input: ActionInput): void {
   reconcile();
+  updateWalk();
   const hero = Dungeon.hero;
   const lvl = Dungeon.level;
   const dt = Tuning.STEP;
@@ -319,6 +482,7 @@ function tick(input: ActionInput): void {
   sprinting = !!input.sprint && len > 0.2 && swing === 0 && !held && !(hunger?.isStarving() ?? false);
   let speed = Tuning.HERO_SPEED * hero.speed();
   if (sprinting) speed *= Tuning.SPRINT_SPEED;
+  if (!hero.flying && lvl.water[hero.pos]) speed *= Tuning.WATER_SLOW;
   if (swing > 0) speed *= Tuning.SWING_SLOWDOWN;
   const k = 1 - Math.exp(-Tuning.HERO_ACCEL * dt);
   const vx = hb.vx + (mx * speed - hb.vx) * k;
@@ -326,6 +490,9 @@ function tick(input: ActionInput): void {
   const still = Math.hypot(vx, vz) < 0.01 && Math.hypot(mx, mz) === 0;
   const moved = moveBody(hb, still ? 0 : vx, still ? 0 : vz, dt);
   if (moved > 1e-4 && swing === 0 && Math.hypot(mx, mz) > 0.05) hb.facing = Math.atan2(mz, mx);
+
+  checkPit(hb, mx, mz, dt);
+  restAndSearch(moved, dt);
 
   if (sprinting && hunger) {
     const was = hunger.hungerLevel;
@@ -342,8 +509,12 @@ function tick(input: ActionInput): void {
 
   // ---- Mobs ----
   for (const [ch, b] of bodies) {
-    if (ch === hero) continue;
-    const [wx, wz] = thinkMob(ch as Mob, b, hb, dt);
+    if (ch === hero || !ch.isAlive()) continue;
+    let [wx, wz] = thinkMob(ch as Mob, b, (c) => bodies.get(c), dt);
+    if (!ch.flying && lvl.water[ch.pos] && ch.constructor.name !== 'Piranha') {
+      wx *= Tuning.WATER_SLOW;
+      wz *= Tuning.WATER_SLOW;
+    }
     const moving = Math.hypot(wx, wz) > 0.01;
     moveBody(b, wx, wz, dt);
     if (moving) b.facing = Math.atan2(wz, wx);
@@ -353,6 +524,7 @@ function tick(input: ActionInput): void {
   // ---- Cells: everyone's logical position follows their body ----
   const heroCell = cellOf(hb.x, hb.z);
   if (heroCell !== hero.pos) heroEnters(heroCell);
+  pressPending(hb);
   for (const [ch, b] of bodies) {
     if (ch === hero || !ch.isAlive()) continue;
     const cell = cellOf(b.x, b.z);
@@ -381,6 +553,9 @@ export const ActionGame = {
     target = swingTarget = null;
     engaged = false;
     swing = heroCooldown = hitstop = 0;
+    still = passiveSearch = searching = sitHeal = pitPush = 0;
+    sitting = false;
+    pendingPress = -1;
   },
 
   get enabled(): boolean {
@@ -399,6 +574,46 @@ export const ActionGame = {
 
   get sprinting(): boolean {
     return sprinting;
+  },
+
+  /** The hero is sitting down to rest (standing still, nothing hostile in sight). */
+  get sitting(): boolean {
+    return sitting;
+  },
+
+  /** Progress of a careful search, 0..1 (0 when not searching). */
+  get searchProgress(): number {
+    return searching > 0 ? 1 - searching / Tuning.SEARCH_TIME : 0;
+  },
+
+  /** Search button/key: stand still for a moment to search carefully (moving cancels it). */
+  search(): void {
+    if (!Dungeon.hero?.isAlive() || searching > 0) return;
+    searching = Tuning.SEARCH_TIME;
+    Dungeon.hero.showStatus('default', 'searching');
+  },
+
+  /**
+   * Uses an item in real time. Throws and zaps don't ask for a cell: they go at the target (or the best enemy
+   * ahead), or along `dir` (world direction) when the player aimed by hand.
+   */
+  useItem(item: Item, action: string, dir: [number, number] | null = null): void {
+    const hero = Dungeon.hero;
+    if (!hero?.isAlive()) return;
+    if (action === Item.AC_THROW || action === 'ZAP') {
+      const cell = aimCell(dir);
+      item.execute(hero, action);
+      const p = UI.pending;
+      if (p && p.kind === 'cell') Game.answer(cell === hero.pos ? null : cell);
+      return;
+    }
+    item.execute(hero, action);
+  },
+
+  /** The quickslot: use its item's default action (aimed as above). */
+  useQuickslot(dir: [number, number] | null = null): void {
+    const item = Game.quickslotItem();
+    if (item && item.defaultAction !== null) ActionGame.useItem(item, item.defaultAction, dir);
   },
 
   /**

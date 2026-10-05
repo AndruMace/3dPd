@@ -334,6 +334,12 @@ export abstract class Mob extends Char {
   }
 
   protected nowhereToRun(): void {}
+
+  /**
+   * Action mode: what this mob's act() did every turn besides moving and fighting (a bee's dwindling life, a
+   * piranha drowning in air). Called once per PD turn by the real-time brain.
+   */
+  realtimeTurn(): void {}
 }
 
 registerClass('Mob', Mob);

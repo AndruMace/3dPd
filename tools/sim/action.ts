@@ -58,6 +58,20 @@ function play(seed: string): Result {
         const food = hero.belongings.backpack.items.find((i) => i.actions(hero).includes('EAT'));
         if (food) Game.itemAction(food.uid, 'EAT');
       }
+      // Now and then use something from the pack: potions, scrolls, wands, thrown weapons (stresses real-time
+      // item use: gases, teleports, bolts, pickers that pause).
+      if (Math.random() < Tuning.STEP / 15) {
+        const usable = hero.belongings.backpack.items.filter((i) =>
+          i.actions(hero).some((a) => ['DRINK', 'READ', 'ZAP', 'THROW'].includes(a)),
+        );
+        const item = usable[Math.floor(Math.random() * usable.length)];
+        if (item) {
+          const action = item.actions(hero).find((a) => ['DRINK', 'READ', 'ZAP', 'THROW'].includes(a))!;
+          ActionGame.useItem(item, action, Math.random() < 0.5 ? null : [Math.random() - 0.5, Math.random() - 0.5]);
+          itemsUsed++;
+          continue;
+        }
+      }
       const bodies = ActionGame.bodies();
       const hb = bodies.get(hero)!;
       const enemyNear = [...Dungeon.level.mobs].some(
@@ -108,6 +122,7 @@ function play(seed: string): Result {
   };
 }
 
+let itemsUsed = 0;
 const results: Result[] = [];
 for (let i = 0; i < runs; i++) results.push(play(`action-${i}`));
 const crashes = results.filter((r) => r.error);
@@ -118,6 +133,7 @@ for (const r of results) if (!r.alive && !r.error) causes.set(r.cause, (causes.g
 console.log(`${runs} action runs (${seconds}s each), ${crashes.length} crashes`);
 console.log('depth reached:', Object.fromEntries([...depths].sort((a, b) => a[0] - b[0])));
 console.log('deaths:', Object.fromEntries(causes));
+console.log('items used per run:', (itemsUsed / runs).toFixed(1));
 console.log('kills per run:', (results.reduce((n, r) => n + r.kills, 0) / runs).toFixed(1));
 for (const c of crashes.slice(0, 5))
   console.log(`\n--- ${c.seed} (depth ${c.depth}, ${c.time.toFixed(1)}s)\n${c.error}`);

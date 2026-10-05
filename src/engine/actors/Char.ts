@@ -71,6 +71,14 @@ export abstract class Char extends Actor {
     for (const b of bundle.getCollection<Buff>('buffs')) b.attachTo(this);
   }
 
+  /**
+   * Action mode: this character still takes PD turns on the world clock (it never moves, only times out, like
+   * the Wand of Flock's sheep). Everyone else is driven by the real-time brain.
+   */
+  realtimeScheduled(): boolean {
+    return false;
+  }
+
   showStatus(color: StatusColor, text: string): void {
     Events.emit({ type: 'status', id: this.id(), text, color });
   }
